@@ -123,9 +123,16 @@ For substantial or cross-component work: run a no-code discovery/grill, perform
 bounded investigation, resolve material questions, write and agree a task
 specification, start implementation from fresh context using that spec as the
 scope boundary, run proportional checks, obtain an independent code review,
-fix accepted findings, and re-check. Commit and push only with explicit
-authorization. The agreed task file bridges sessions; old chat history does
-not.
+fix accepted findings, and re-check. The agreed task file bridges sessions; old
+chat history does not.
+
+Commit and push in the private repository always require explicit owner
+authorization. This public context is the one documented exception: once a phase
+is fully complete and remotely verified, refreshing, sanitizing, committing and
+pushing `PROJECT_STATE.md` is part of phase closeout and needs no further
+confirmation, provided the change does nothing beyond bringing the public state
+up to date. The authoritative rule is `docs/AI_WORKFLOW.md` in the private
+repository.
 
 ## Required before production
 
