@@ -71,23 +71,31 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `002-v2-scaffolding`, phase 1 of the accepted
-  financial-core redesign program. Independent review and focused re-review
-  closed every accepted finding, and local acceptance checks passed.
+- **Completed phase:** `003-legacy-deal-rules-doc`, phase 2 of the accepted
+  financial-core redesign program. An independent review and two focused
+  re-reviews closed every accepted finding; the last re-review found nothing
+  new.
 - **Implementation:** commit
-  `ba510586e874739c62a912c258a81c99bebc21bc`. The private branch is clean and
+  `fb656e952739a004ee7dac7c2ab9eabaebd90040`. The private branch is clean and
   synchronized with its remote.
-- **Remote verification:** GitHub Actions workflow `v2` run `33035472379`
-  completed successfully for that commit; `guards and contract`, `web`, and
-  `crypto` all passed.
-- **Delivered scope:** independent Web, Crypto, and contract Go modules;
-  migration tooling; safe PostgreSQL test infrastructure; health/readiness;
-  build guards; and a v2-only CI workflow. Phase 002 intentionally contains no
-  financial business logic or full Web/Crypto protocol implementation.
-- **Current/next task:** `003-legacy-deal-rules-doc`. It has not started, and no
-  task 003 specification exists at this checkpoint.
-- **Next action:** perform bounded discovery of the legacy deal rules and
-  defects, then agree the task 003 specification before implementation.
+- **Remote verification:** none was triggered, by design. The `v2` workflow is
+  scoped to the v2 services, the root Makefile, the guards script and its own
+  definition; this phase is documentation-only and touches none of those paths,
+  so no run was created. That is the configured behavior, not a failure.
+  Acceptance was established locally instead: the full v2 build, vet, unit test
+  and structural guard suite passes and no v2 path was modified. The most
+  recent successful `v2` run remains run `33035472379` on the phase 002 commit.
+- **Delivered scope:** a verified record of how the legacy system actually
+  executes deal and requisite rules - 96 rules under stable identifiers in nine
+  namespaces, plus 22 confirmed defects - together with a frozen schema-only
+  SQL snapshot, a curated per-object slice cut verbatim from that snapshot, and
+  a reproducible export script that structurally identifies its source,
+  generates its own provenance and publishes atomically. The phase changed no
+  product code and fixed no legacy defect.
+- **Current/next task:** `004-web-schema-baseline`. It has not started, and no
+  task 004 specification exists at this checkpoint.
+- **Next action:** agree the task 004 specification - the non-financial Web
+  baseline schema and its statistical triggers - before implementation.
 
 Completed architecture/specification milestones:
 
@@ -99,6 +107,10 @@ Completed architecture/specification milestones:
   defects.
 - Task 002 completed and remotely verified: its bounded v2 scaffolding and
   checks are implemented.
+- Task 003 completed: the legacy deal and requisite rules, and the defects in
+  them, are recorded under stable identifiers with the original SQL definitions
+  committed as evidence. Later phases port rules from that record instead of
+  reading a live legacy database.
 
 ## Known traps
 
@@ -111,9 +123,14 @@ Completed architecture/specification milestones:
 - Do not turn `WAITING_FOR_FUNDS` into delayed automatic execution.
 - Do not place signing, custody material, Telegram approval, whitelist, or hard
   payout policy on Web.
-- Legacy documentation can be stale, and the old database schema is not fully
-  reproducible from historical repository artifacts. Verify current code and
-  accepted phase documents for scoped work.
+- Legacy documentation can be stale. Verify current code and accepted phase
+  documents for scoped work.
+- The committed legacy SQL snapshot is historical evidence, not a migration and
+  not the source of the v2 schema; the v2 schema is owned by the per-service
+  migrations. Nothing in that snapshot is applied to any database or built.
+- The rule and defect identifiers in the legacy rules document are referenced by
+  later phases. Do not renumber them, and do not assume a rule applies on every
+  code path: several are explicitly recorded as bypassed on some branches.
 - Known legacy test/typecheck/toolchain failures are not automatically v2
   regressions; compare them with the relevant baseline and changed scope.
 
