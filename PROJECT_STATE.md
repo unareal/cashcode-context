@@ -71,20 +71,23 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Current phase/task:** `002-v2-scaffolding`, phase 1 of the accepted
-  financial-core redesign program.
-- **Phase goal:** establish independent Web, Crypto, and contract Go modules;
+- **Completed phase:** `002-v2-scaffolding`, phase 1 of the accepted
+  financial-core redesign program. Independent review and focused re-review
+  closed every accepted finding, and local acceptance checks passed.
+- **Implementation:** commit
+  `ba510586e874739c62a912c258a81c99bebc21bc`. The private branch is clean and
+  synchronized with its remote.
+- **Remote verification:** GitHub Actions workflow `v2` run `33035472379`
+  completed successfully for that commit; `guards and contract`, `web`, and
+  `crypto` all passed.
+- **Delivered scope:** independent Web, Crypto, and contract Go modules;
   migration tooling; safe PostgreSQL test infrastructure; health/readiness;
-  build guards; and a v2-only CI workflow. It intentionally adds no financial
-  business logic or Web/Crypto protocol implementation.
-- **Observed state at this update:** the task specification is committed on the
-  branch. Scaffolding implementation is present as active private-repository
-  working-tree changes. The project guide reports local `make v2-check` as
-  passing. Remote v2 CI is still unverified pending an authorized private-repo
-  push.
-- **Next action:** finish review and acceptance checks for task 002, resolve any
-  findings, then commit/push it under separate authorization and confirm the
-  remote v2 CI run. After 002 acceptance, begin `003-legacy-deal-rules-doc`.
+  build guards; and a v2-only CI workflow. Phase 002 intentionally contains no
+  financial business logic or full Web/Crypto protocol implementation.
+- **Current/next task:** `003-legacy-deal-rules-doc`. It has not started, and no
+  task 003 specification exists at this checkpoint.
+- **Next action:** perform bounded discovery of the legacy deal rules and
+  defects, then agree the task 003 specification before implementation.
 
 Completed architecture/specification milestones:
 
@@ -94,7 +97,8 @@ Completed architecture/specification milestones:
 - Master task 001 accepted: component map, keep/rewrite/remove boundaries,
   detailed financial flows, phase order, acceptance criteria, and known legacy
   defects.
-- Task 002 accepted: bounded v2 scaffolding design and checks.
+- Task 002 completed and remotely verified: its bounded v2 scaffolding and
+  checks are implemented.
 
 ## Known traps
 
