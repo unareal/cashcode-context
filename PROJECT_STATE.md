@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-08-27
+Last updated: 2026-08-28
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -71,31 +71,58 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `003-legacy-deal-rules-doc`, phase 2 of the accepted
-  financial-core redesign program. An independent review and two focused
+- **Completed phase:** `004-web-schema-baseline`, phase 3 of the accepted
+  financial-core redesign program. An independent review and four focused
   re-reviews closed every accepted finding; the last re-review found nothing
   new.
 - **Implementation:** commit
-  `fb656e952739a004ee7dac7c2ab9eabaebd90040`. The private branch is clean and
+  `5acf3023f58416cfa1d152f089db6ced49f97c27`. The private branch is clean and
   synchronized with its remote.
-- **Remote verification:** none was triggered, by design. The `v2` workflow is
-  scoped to the v2 services, the root Makefile, the guards script and its own
-  definition; this phase is documentation-only and touches none of those paths,
-  so no run was created. That is the configured behavior, not a failure.
-  Acceptance was established locally instead: the full v2 build, vet, unit test
-  and structural guard suite passes and no v2 path was modified. The most
-  recent successful `v2` run remains run `33035472379` on the phase 002 commit.
-- **Delivered scope:** a verified record of how the legacy system actually
-  executes deal and requisite rules - 96 rules under stable identifiers in nine
-  namespaces, plus 22 confirmed defects - together with a frozen schema-only
-  SQL snapshot, a curated per-object slice cut verbatim from that snapshot, and
-  a reproducible export script that structurally identifies its source,
-  generates its own provenance and publishes atomically. The phase changed no
-  product code and fixed no legacy defect.
-- **Current/next task:** `004-web-schema-baseline`. It has not started, and no
-  task 004 specification exists at this checkpoint.
-- **Next action:** agree the task 004 specification - the non-financial Web
-  baseline schema and its statistical triggers - before implementation.
+- **Remote verification:** `v2` workflow run `33140604625` on that exact commit,
+  concluded **success** across all three jobs (guards and contract, web,
+  crypto).
+- **Delivered scope:** the Web database now exists as versioned SQL in the
+  repository. The disposable phase-002 `0001_bootstrap` migration is replaced by
+  `0001_baseline` at the same migration version: **12 enum types, 27 tables, 3
+  trigger functions and 10 trigger declarations**, with `deal` at **28 columns**
+  and `requisite` at **29 columns**. The migration applies to an empty database
+  and rolls back completely without `CASCADE`, carries no data, and creates no
+  PostgreSQL extension. Integration tests pin the schema as an inventory -
+  tables, enum labels and their order, columns with type and nullability,
+  primary keys, unique and check constraints, index definitions, foreign-key
+  targets and referential actions, and the trigger allowlist with its negative
+  counterpart - so a later phase cannot add or lose an object silently.
+- **Migration transition:** the replacement is at migration version 1, and the
+  migration runner records version numbers rather than file contents. A
+  development database that already recorded phase-002's version 1 will
+  therefore **not** rerun it and will silently report a baseline it does not
+  have. Every existing disposable phase-002 Web development database must be
+  recreated with `make db-reset-web`. This is deliberate: there is no automatic
+  guard, and the readiness path stays read-only and non-mutating.
+- **Current/next task:** `005-port-auth-users` is the next phase in the accepted
+  master plan. **It has not been started**, and no task 005 specification exists
+  at this checkpoint.
+- **Next action:** agree the task 005 specification - porting auth, MFA,
+  sessions, roles, invites and permissions onto the new baseline, with the
+  `/auth/*` contract unchanged - before implementation.
+
+### Phase boundaries the baseline deliberately holds
+
+Structure exists in the baseline where behavior does not. A table being present
+is not evidence that its behavior is implemented.
+
+- No ledger, accounts or holds before phase 008.
+- No `requisite_block`, no `requisite_contragent_slot`, and no deal-flow policy
+  before phase 009: requisite selection, limit spending, expired counters,
+  auto-blocking and counterparty binding are all absent, and the tables that
+  will carry them have no writer yet.
+- The legacy financial-statistics triggers, wallet and queue structures,
+  batch/MultiSend, per-deal on-chain settlement and the withdrawal model are not
+  present and are not scheduled before their own phases.
+- The baseline seeds no reference data. Ownership is fixed: bank display names
+  belong to phase 006; tariff rates and entity fees belong to phase 007; each
+  system configuration key is defined and supplied by the phase that introduces
+  the behavior depending on it, with no bulk import of legacy configuration.
 
 Completed architecture/specification milestones:
 
@@ -111,6 +138,11 @@ Completed architecture/specification milestones:
   them, are recorded under stable identifiers with the original SQL definitions
   committed as evidence. Later phases port rules from that record instead of
   reading a live legacy database.
+- Task 004 completed and remotely verified: the non-financial Web schema
+  baseline is versioned in the repository, and the decisions that shaped it are
+  recorded in its specification - the user table rename, money precision
+  separating quantities from rates, the deliberately narrow trigger allowlist,
+  and the exclusions that keep later phases' architecture out of the baseline.
 
 ## Known traps
 
@@ -133,6 +165,18 @@ Completed architecture/specification milestones:
   code path: several are explicitly recorded as bypassed on some branches.
 - Known legacy test/typecheck/toolchain failures are not automatically v2
   regressions; compare them with the relevant baseline and changed scope.
+- A disposable development database created before the schema baseline will
+  report the baseline as applied while lacking its tables. Recreate it rather
+  than trying to migrate it forward, and do not add a runtime version guard for
+  that one-time transition.
+- The presence of a table in the baseline does not mean its behavior exists.
+  Several tables ship with no writer at all until their phase arrives.
+- Do not add product behavior to a structural or mechanical phase. Legacy shape
+  is carried verbatim unless a deviation has recorded evidence; "the database is
+  still empty so it is cheap now" is not evidence, and neither is "no current
+  code path exercises it".
+- A later phase that introduces a new invariant ships its own migration. An
+  accepted and pushed baseline migration is not amended retroactively.
 
 ## AI development workflow
 
