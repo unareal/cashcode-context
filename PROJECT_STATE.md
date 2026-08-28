@@ -81,6 +81,12 @@ disconnects.
 - **Remote verification:** `v2` workflow run `33140604625` on that exact commit,
   concluded **success** across all three jobs (guards and contract, web,
   crypto).
+- **Branch head:** commit `94ef63cfcbcdb024eec65637537e945c112b37c8`, a
+  workflow/tooling change that carries no product code. It was made between
+  phases and does not advance the program: phase 004 remains the last completed
+  phase. The `v2` workflow does not run on it, correctly - its path filter
+  selects none of the files it touches, so remote CI is **N/A** for that commit
+  rather than missing.
 - **Delivered scope:** the Web database now exists as versioned SQL in the
   repository. The disposable phase-002 `0001_bootstrap` migration is replaced by
   `0001_baseline` at the same migration version: **12 enum types, 27 tables, 3
@@ -102,9 +108,10 @@ disconnects.
 - **Current/next task:** `005-port-auth-users` is the next phase in the accepted
   master plan. **It has not been started**, and no task 005 specification exists
   at this checkpoint.
-- **Next action:** agree the task 005 specification - porting auth, MFA,
-  sessions, roles, invites and permissions onto the new baseline, with the
-  `/auth/*` contract unchanged - before implementation.
+- **Next action:** run phase 005 - porting auth, MFA, sessions, roles, invites
+  and permissions onto the new baseline, with the `/auth/*` contract unchanged.
+  Under the current workflow the phase specification is produced and reviewed
+  inside the run rather than agreed beforehand; see the workflow section below.
 
 ### Phase boundaries the baseline deliberately holds
 
@@ -180,15 +187,57 @@ Completed architecture/specification milestones:
 
 ## AI development workflow
 
-For substantial or cross-component work: run a no-code discovery/grill, perform
-bounded investigation, resolve material questions, write and agree a task
-specification, start implementation from fresh context using that spec as the
-scope boundary, run proportional checks, obtain an independent code review,
-fix accepted findings, and re-check. The agreed task file bridges sessions; old
-chat history does not.
+The workflow is now autonomous phase orchestration. The owner is not a message
+relay between AI sessions: the main session orchestrates a phase end to end,
+delegates bounded work to subagents, and returns to the owner only for a
+decision that is genuinely the owner's.
+
+A phase runs as `/run-phase <phase>`, or `/run-phase <phase> --ship`. The
+lifecycle is: load project state, resolve the phase against the accepted master
+plan, bounded investigation, internal-first grill, owner gate, draft the phase
+specification, independent specification review, automatic fixes and focused
+re-review until clean, owner gate, implement, acceptance checks, independent
+code review, classify findings, automatic fixes and focused re-review until
+clean, commit and push if preauthorized, required/applicable remote CI, phase
+closeout, then stop. The next phase never starts automatically.
+
+Every uncertainty is classified **AUTO**, **OWNER** or **ESCALATE**. AUTO is
+ordinary engineering work the session must settle itself - internal structure,
+naming, migration mechanics, indexes, constraints implied by accepted
+invariants, tests, fixtures, factual corrections, objectively correct reviewer
+fixes. OWNER is reserved for money movement and availability, merchant, trader
+or user-visible behavior, who may perform or approve an operation, custody and
+withdrawal semantics, trust boundaries, whether to preserve a legacy rule where
+that was never decided, policy thresholds, compatibility breaks, infrastructure
+trade-offs, accepted architecture, and material scope expansion; unresolved doubt in those
+categories resolves to OWNER, not to AUTO. ESCALATE is a conflict between
+authoritative documents, which is presented rather than silently resolved.
+
+Discovery is **internal-first**: an uncertainty is answered from the phase task
+and master plan, the ADRs, newer accepted phase artifacts, current v2 code,
+recorded legacy evidence, or bounded investigation, in that order. Only OWNER
+and ESCALATE items reach the owner, batched rather than one at a time.
+
+Review is independent and the fix loop is autonomous. The agent that writes an
+artifact never reviews it; a reviewer never edits what it reviews; a finding is
+never closed as invalid by its author, and a reviewer's OWNER or ESCALATE
+classification cannot be downgraded by another agent into an ordinary fix. Objective findings
+are fixed and re-reviewed automatically, with bounded cycles and a stagnation
+rule, so the owner is not consulted between normal iterations.
+
+Remote CI is a closeout gate when it is **required and applicable**: the final
+diff touches a path the workflow filter selects and the branch matches its
+trigger. Otherwise it is recorded as N/A with the reason. An unrelated workflow
+is never triggered to manufacture a green check.
 
 Commit and push in the private repository always require explicit owner
-authorization. This public context is the one documented exception: once a phase
+authorization. The one preauthorization is phase-level: `--ship`, typed
+literally in the invocation, authorizes committing and pushing the bounded
+result of that phase only, after every gate is clean. It is never inferred,
+never inherited from an earlier run, and becomes invalid if an owner decision
+changes the accepted scope, an ADR must change, or the phase expands.
+
+This public context is the documented exception to the push rule: once a phase
 is fully complete and remotely verified, refreshing, sanitizing, committing and
 pushing `PROJECT_STATE.md` is part of phase closeout and needs no further
 confirmation, provided the change does nothing beyond bringing the public state
