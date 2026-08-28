@@ -71,54 +71,58 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `004-web-schema-baseline`, phase 3 of the accepted
-  financial-core redesign program. An independent review and four focused
-  re-reviews closed every accepted finding; the last re-review found nothing
-  new.
+- **Completed phase:** `005-port-auth-users`, phase 4 of the accepted
+  financial-core redesign program. The specification went through seven review
+  rounds before acceptance; the implementation through three.
 - **Implementation:** commit
-  `5acf3023f58416cfa1d152f089db6ced49f97c27`. The private branch is clean and
+  `f459d1552effd3290a88580fbf5b8c69f29f3066`. The private branch is clean and
   synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33140604625` on that exact commit,
+- **Remote verification:** `v2` workflow run `33173651582` on that exact commit,
   concluded **success** across all three jobs (guards and contract, web,
   crypto).
-- **Branch head:** commit `94ef63cfcbcdb024eec65637537e945c112b37c8`, a
-  workflow/tooling change that carries no product code. It was made between
-  phases and does not advance the program: phase 004 remains the last completed
-  phase. The `v2` workflow does not run on it, correctly - its path filter
-  selects none of the files it touches, so remote CI is **N/A** for that commit
-  rather than missing.
-- **Delivered scope:** the Web database now exists as versioned SQL in the
-  repository. The disposable phase-002 `0001_bootstrap` migration is replaced by
-  `0001_baseline` at the same migration version: **12 enum types, 27 tables, 3
-  trigger functions and 10 trigger declarations**, with `deal` at **28 columns**
-  and `requisite` at **29 columns**. The migration applies to an empty database
-  and rolls back completely without `CASCADE`, carries no data, and creates no
-  PostgreSQL extension. Integration tests pin the schema as an inventory -
-  tables, enum labels and their order, columns with type and nullability,
-  primary keys, unique and check constraints, index definitions, foreign-key
-  targets and referential actions, and the trigger allowlist with its negative
-  counterpart - so a later phase cannot add or lose an object silently.
-- **Migration transition:** the replacement is at migration version 1, and the
-  migration runner records version numbers rather than file contents. A
-  development database that already recorded phase-002's version 1 will
-  therefore **not** rerun it and will silently report a baseline it does not
-  have. Every existing disposable phase-002 Web development database must be
-  recreated with `make db-reset-web`. This is deliberate: there is no automatic
-  guard, and the readiness path stays read-only and non-mutating.
-- **Current/next task:** `005-port-auth-users` is the next phase in the accepted
-  master plan. **It has not been started**, and no task 005 specification exists
-  at this checkpoint.
-- **Next action:** run phase 005 - porting auth, MFA, sessions, roles, invites
-  and permissions onto the new baseline, with the `/auth/*` contract unchanged.
-  Under the current workflow the phase specification is produced and reviewed
-  inside the run rather than agreed beforehand; see the workflow section below.
+- **Delivered scope:** the auth, MFA, session, users, roles, invites, team-lead
+  referral and trader-permission surface now lives in `services/web`, on the
+  phase-004 schema. The thirteen `/auth/*` routes and the admin, support-admin,
+  team-lead and trader routes reproduce the legacy wire contract - status codes,
+  error codes and message strings - with whole-body assertions in tests. New in
+  the module: Argon2id password hashing, HS256 access tokens with a refresh
+  token that is not a JWT, TOTP with replay protection, the admin IP allowlist,
+  the first repository layer and transaction boundary, the user and invite audit
+  path, and the auth middleware and rate limiters. The WAF wrapper, the
+  Redis-backed session service, the development bypass group and the dead
+  handlers the master task lists for removal are not ported, and a test scans
+  the module to keep them out. No migration was needed: every table the phase
+  uses already exists in the schema baseline.
+- **Deliberate deviations from legacy, all three decided by the owner:**
+  "log out from all devices" now actually revokes the stored sessions, where the
+  legacy endpoint returned success and revoked nothing; a trader or merchant
+  created in v2 keeps the legacy insurance minimum instead of zero, so the
+  future ledger does not find them with no requirement at all - now as a fixed
+  value, because the legacy configuration table it used to come from is not part
+  of the v2 schema; and a failure to
+  persist a session during login, registration, refresh or MFA confirmation
+  fails the request instead of returning a token that would never work.
+  Everything else is carried verbatim, including a documented list of legacy
+  quirks that an idiomatic rewrite would remove by reflex. Two further
+  observable differences follow from the master plan itself rather than from a
+  choice: the IP-level rejections disappear from `/auth/*` (see the
+  traps below), and a merchant registered in v2 gets no default tariff rows
+  until phase 007 supplies them.
+- **Current/next task:** `006-port-requisites-devices` is the next phase in the
+  accepted master plan. It has not been started, and no specification for it
+  exists at this checkpoint.
+- **Next action:** run phase 006 - requisites, devices, device logging and the
+  SMS/push parsers, with the device HMAC and QR contract unchanged.
 
-### Phase boundaries the baseline deliberately holds
+### Phase boundaries deliberately held
 
 Structure exists in the baseline where behavior does not. A table being present
 is not evidence that its behavior is implemented.
 
 - No ledger, accounts or holds before phase 008.
+- Requisites, devices and their parsers belong to phase 006; phase 005 touches a
+  requisite only to carry over the one cascade that revoking an inside-bank
+  permission has always performed.
 - No `requisite_block`, no `requisite_contragent_slot`, and no deal-flow policy
   before phase 009: requisite selection, limit spending, expired counters,
   auto-blocking and counterparty binding are all absent, and the tables that
@@ -150,6 +154,10 @@ Completed architecture/specification milestones:
   recorded in its specification - the user table rename, money precision
   separating quantities from rates, the deliberately narrow trigger allowlist,
   and the exclusions that keep later phases' architecture out of the baseline.
+- Task 005 completed and remotely verified: the non-financial auth and user
+  surface is ported, the removals the master task requires are done and
+  enforced by a test, and the three behavior changes worth making were decided
+  by the owner rather than by the implementation.
 
 ## Known traps
 
@@ -184,6 +192,43 @@ Completed architecture/specification milestones:
   code path exercises it".
 - A later phase that introduces a new invariant ships its own migration. An
   accepted and pushed baseline migration is not amended retroactively.
+- In a porting phase the reflex to tidy is the main hazard. Several legacy
+  behaviors are deliberately preserved and individually recorded: a refresh
+  response whose "expires in" field carries an absolute timestamp; two invite
+  endpoints answering in different key styles; an empty list serialized as null;
+  an administrator search by id that can never match; invalid enum values
+  answering 500 rather than 400; and an access token issued at registration
+  that every protected route rejects. Removing any of them is a defect, not a
+  cleanup - and deciding to fix one is an owner decision, because the accepted
+  defect-fix list covers only deals, requisites, the ledger and withdrawals.
+- The audit path never serializes a whole row. It writes an explicit allowlist
+  of safe columns, and a test proves password hashes, MFA secrets and unconsumed
+  invite codes never reach the audit table. Do not "simplify" it into a row
+  dump, and do not add a read-back to make an audited value look tidier.
+- Web has no Telegram bot token by accepted architecture, so the alerts legacy
+  sent on account lockout and on a blocked administrator login have no transport
+  in v2. The controls themselves are preserved; only the notification is gone.
+- Redis must fail in two different directions, and the
+  difference is the point: an unconfigured client validates one-time codes
+  without replay protection, while a configured but failing one rejects them.
+  With it unreachable, no account with MFA can sign in - administrators
+  included - while the per-account lockout quietly stops applying, because it
+  fails open in the same situation. That is faithful to legacy and is an availability question for the
+  cutover, not a bug to paper over.
+- The administrator address allowlist is empty by default, and an empty
+  allowlist means the restriction is simply skipped, with nothing warning that
+  it is missing. Carrying the deployed list over is a precondition of the
+  cutover phase, not an optional step. When only per-login rules are used, a
+  login with no rule of its own is allowed through, so either every
+  administrator is listed or the global list is used - a non-empty global list
+  applies to everyone.
+- Removing the legacy request filter has consequences beyond the filter: request
+  bodies on registration and on the administrator routes are no longer bounded
+  by the application, passwords may now contain characters the filter rejected,
+  and its length limits counted bytes where the replacement validation counts
+  characters. With the IP-level protections gone, the `403 ip_blocked` and
+  `429 too_many_attempts` responses no longer exist on `/auth/*` either; the
+  per-account lockout and the route rate limiters remain.
 
 ## AI development workflow
 
