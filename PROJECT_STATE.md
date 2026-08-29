@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-08-28
+Last updated: 2026-08-29
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -71,48 +71,47 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `005-port-auth-users`, phase 4 of the accepted
-  financial-core redesign program. The specification went through seven review
-  rounds before acceptance; the implementation through three.
+- **Completed phase:** `006-port-requisites-devices`, phase 5 of the accepted
+  financial-core redesign program.
 - **Implementation:** commit
-  `f459d1552effd3290a88580fbf5b8c69f29f3066`. The private branch is clean and
+  `3b26602a198136201476d4a5c0fb0cd52b28d31b`. The private branch is clean and
   synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33173651582` on that exact commit,
+- **Remote verification:** `v2` workflow run `33237242876` on that exact commit,
   concluded **success** across all three jobs (guards and contract, web,
   crypto).
-- **Delivered scope:** the auth, MFA, session, users, roles, invites, team-lead
-  referral and trader-permission surface now lives in `services/web`, on the
-  phase-004 schema. The thirteen `/auth/*` routes and the admin, support-admin,
-  team-lead and trader routes reproduce the legacy wire contract - status codes,
-  error codes and message strings - with whole-body assertions in tests. New in
-  the module: Argon2id password hashing, HS256 access tokens with a refresh
-  token that is not a JWT, TOTP with replay protection, the admin IP allowlist,
-  the first repository layer and transaction boundary, the user and invite audit
-  path, and the auth middleware and rate limiters. The WAF wrapper, the
-  Redis-backed session service, the development bypass group and the dead
-  handlers the master task lists for removal are not ported, and a test scans
-  the module to keep them out. No migration was needed: every table the phase
-  uses already exists in the schema baseline.
-- **Deliberate deviations from legacy, all three decided by the owner:**
-  "log out from all devices" now actually revokes the stored sessions, where the
-  legacy endpoint returned success and revoked nothing; a trader or merchant
-  created in v2 keeps the legacy insurance minimum instead of zero, so the
-  future ledger does not find them with no requirement at all - now as a fixed
-  value, because the legacy configuration table it used to come from is not part
-  of the v2 schema; and a failure to
-  persist a session during login, registration, refresh or MFA confirmation
-  fails the request instead of returning a token that would never work.
-  Everything else is carried verbatim, including a documented list of legacy
-  quirks that an idiomatic rewrite would remove by reflex. Two further
-  observable differences follow from the master plan itself rather than from a
-  choice: the IP-level rejections disappear from `/auth/*` (see the
-  traps below), and a merchant registered in v2 gets no default tariff rows
-  until phase 007 supplies them.
-- **Current/next task:** `006-port-requisites-devices` is the next phase in the
-  accepted master plan. It has not been started, and no specification for it
-  exists at this checkpoint.
-- **Next action:** run phase 006 - requisites, devices, device logging and the
-  SMS/push parsers, with the device HMAC and QR contract unchanged.
+- **Delivered scope:** the requisite, device, device-logging and bank-notification
+  parser surface now lives in `services/web`, on the phase-004 schema. One hundred
+  routes across the public, Android device, web device-management, trader, admin,
+  team-lead and support-admin groups reproduce the legacy wire contract - status
+  codes, error codes and message strings - and a route inventory test compares the
+  registered set against the specification in both directions. New in the module:
+  the device authentication and QR packages, the SMS parser, the in-memory device
+  status store, a single device reaper worker, the requisite audit allowlist, and
+  the migration that seeds the bank catalogue. No other migration was needed: every
+  other table the phase uses already existed in the schema baseline.
+- **The device authentication and pairing contract is carried unchanged**, because
+  the installed Android clients depend on it. Its details live in the private phase
+  specification and in the repository evidence, not here; what a fresh session needs
+  is in the traps below.
+- The legacy tree had no tests for the bank-notification parsers, so the SMS parser
+  port is pinned by a golden corpus captured by running the frozen parser itself;
+  that corpus, not an argument, is the port's correctness evidence.
+- **Owner decisions recorded in the specification:** device log bodies are not
+  stored in v2, only the aggregate counters and status on the device row, and the
+  admin log viewing and export surface is not ported; the bank catalogue is seeded
+  from the real legacy reference data rather than from defaults, because one of its
+  flags governs whether a trader may create an SBP requisite and requisite creation
+  validates the submitted bank against the catalogue; an unauthenticated debug log
+  route and two endpoints with no client are not ported; requisite creation and the
+  write of its chosen tariff rows are one atomic operation, because a requisite left
+  with no tariff rows would accept every tariff instead of none; and a known defect
+  in the interval priority scale is carried as is, its fix left to the phase that
+  owns limit enforcement.
+- **Current/next task:** `007-port-merchant-api-fees-rates` is the next phase in the
+  accepted master plan. It has not been started, and no specification for it exists
+  at this checkpoint.
+- **Next action:** run phase 007 - merchant API, sandbox, IPN outbox, widget, fees,
+  exchange rates and system configuration.
 
 ### Phase boundaries deliberately held
 
@@ -120,9 +119,9 @@ Structure exists in the baseline where behavior does not. A table being present
 is not evidence that its behavior is implemented.
 
 - No ledger, accounts or holds before phase 008.
-- Requisites, devices and their parsers belong to phase 006; phase 005 touches a
-  requisite only to carry over the one cascade that revoking an inside-bank
-  permission has always performed.
+- Requisites, devices and their parsers are delivered by phase 006. Deal flow is
+  not: the notification path stops before deal matching, so nothing in phase 006
+  confirms a deal, releases funds or dispatches an IPN.
 - No `requisite_block`, no `requisite_contragent_slot`, and no deal-flow policy
   before phase 009: requisite selection, limit spending, expired counters,
   auto-blocking and counterparty binding are all absent, and the tables that
@@ -130,10 +129,10 @@ is not evidence that its behavior is implemented.
 - The legacy financial-statistics triggers, wallet and queue structures,
   batch/MultiSend, per-deal on-chain settlement and the withdrawal model are not
   present and are not scheduled before their own phases.
-- The baseline seeds no reference data. Ownership is fixed: bank display names
-  belong to phase 006; tariff rates and entity fees belong to phase 007; each
-  system configuration key is defined and supplied by the phase that introduces
-  the behavior depending on it, with no bulk import of legacy configuration.
+- The baseline seeded no reference data. Bank display names were supplied by phase
+  006; tariff rates and entity fees belong to phase 007; each system configuration
+  key is defined and supplied by the phase that introduces the behavior depending on
+  it, with no bulk import of legacy configuration.
 
 Completed architecture/specification milestones:
 
@@ -158,6 +157,14 @@ Completed architecture/specification milestones:
   surface is ported, the removals the master task requires are done and
   enforced by a test, and the three behavior changes worth making were decided
   by the owner rather than by the implementation.
+- Still in force from task 005, because phase 007 and phase 008 sit next to it: a
+  trader or merchant created in v2 keeps the legacy insurance minimum instead of
+  zero, as a fixed value, so the future ledger does not find them with no requirement
+  at all.
+- Task 006 completed and remotely verified: requisites, devices, device logging and
+  the bank-notification parsers are ported with the device cryptographic contract
+  unchanged, the bank catalogue is seeded, and every deliberate departure from legacy
+  is recorded in the specification with the evidence behind it.
 
 ## Known traps
 
@@ -201,6 +208,20 @@ Completed architecture/specification milestones:
   that every protected route rejects. Removing any of them is a defect, not a
   cleanup - and deciding to fix one is an owner decision, because the accepted
   defect-fix list covers only deals, requisites, the ledger and withdrawals.
+
+- Phase 006 added its own list of deliberately carried quirks, each pinned by a
+  test: several device-management
+  routes have no ownership check at all, so any authenticated user can cancel and
+  thereby delete another user's unbound device, read any requisite's notifications,
+  and rewrite the status of any notification, while a team lead can read a device
+  card outside their own referrals; a missing
+  device header answers 400 while a bad credential answers 401; the create and
+  rebind responses spell the QR field differently; validation tags on the requisite
+  create and update bodies are never evaluated, so almost nothing is validated at
+  bind time; the trader requisite list reports the page length where the admin list
+  reports a real count; and the SMS-Box slot lookup has no status filter, so a
+  blocked or pending requisite still matches. Removing any of them is a defect, not
+  a cleanup.
 - The audit path never serializes a whole row. It writes an explicit allowlist
   of safe columns, and a test proves password hashes, MFA secrets and unconsumed
   invite codes never reach the audit table. Do not "simplify" it into a row
@@ -229,6 +250,28 @@ Completed architecture/specification milestones:
   characters. With the IP-level protections gone, the `403 ip_blocked` and
   `429 too_many_attempts` responses no longer exist on `/auth/*` either; the
   per-account lockout and the route rate limiters remain.
+
+- Device authentication depends on a signature over the **original raw bytes of the
+  request body**. Re-serializing or normalizing the JSON before verifying the
+  signature - including verifying after a framework binding has already consumed and
+  re-encoded the body - is incompatible with the Android clients already paired in
+  the field, and must not be done without a separate, deliberate protocol migration.
+  It breaks every paired device while looking correct in review.
+- Four of the notification statuses the SMS pipeline can produce are not values the
+  status column accepts, so those rows are silently never stored. That is legacy
+  behavior and is carried, which is only safe because the notification write is
+  deliberately its own statement outside any transaction that must still commit.
+  Put it back inside one and a blocked SMS would stop blocking the requisite.
+- The bank catalogue is not decoration. Requisite creation validates the submitted
+  bank against it, and one of its flags decides whether a trader may create an SBP
+  requisite, so an empty or invented catalogue changes what traders can do.
+- Configuration defaults are part of the ported behavior. The legacy backend
+  supplies built-in defaults for the Android release descriptor, so "unset" never
+  reaches its handler; an empty default in v2 would tell every current device that
+  an update is available, with no version and no link. Where legacy has a default,
+  carry it, and cite the line it came from.
+- Do not add a device-log table because the ingestion endpoint appears to need one:
+  the bodies are deliberately not stored (see the checkpoint above).
 
 ## AI development workflow
 
