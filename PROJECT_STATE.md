@@ -71,74 +71,91 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `007-port-merchant-api-fees-rates`, phase 6 of the accepted
-  financial-core redesign program.
-- **Implementation:** commits
-  `da0e9f4d9fb0e41b4befb42f7869349b560f25ef` and
-  `6a44ef8a62e8554c46fa7cbb853c39d3dc826da5`. The private branch is clean and
-  synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33288629508` on `6a44ef8`, concluded
+- **Completed phase:** `008-ledger-core`, phase 7 of the accepted financial-core
+  redesign program.
+- **Implementation:** commits `7225ed046daa0a2b3e5865d1e7a54a88e9d2a354` (the phase)
+  and `2365153973d25c9bfe0751b59a3c413061b8ebc7` (a CI repair, below). The private
+  branch is clean and synchronized with its remote.
+- **Remote verification:** `v2` workflow run `33300831608` on `2365153`, concluded
   **success** across all three jobs (guards and contract, web, crypto).
-- **Delivered scope:** the merchant-facing non-financial surface now lives in
-  `services/web` on the phase-004 schema. Seventy-two routes reproduce the legacy wire
-  contract - status codes, error codes and message strings - across the merchant public
-  API and its sandbox, the widget, fees and tariff rates, exchange rates, system
-  configuration, and the merchant settings and IPN panel routes. A route inventory test
-  compares the registered set against the specification in both directions. New in the
-  module: the merchant API authentication packages, the exchange-rate service with a
-  provider interface and an injected HTTP client so no test reaches a real exchange, the
-  fee resolution and validation services, the system configuration registry and
-  accessor, the widget service and token store, the IPN outbox with its dispatcher
-  worker, and two migrations - the outbox table and the reference-data seed.
-- **IPN delivery is now durable.** Legacy sent it inline or from bare goroutines and
-  persisted nothing. v2 enqueues into an outbox table, and a dispatcher worker claims
-  rows under a lease, sends outside the transaction and records the result, so delivery
-  survives a restart. The wire contract - headers, payload fields, the five attempts and
-  the quadratic backoff - is carried unchanged. The producers arrive with the deal
-  lifecycle, so the outbox ships with no producer beyond the manual merchant trigger,
-  which is ported but has no reachable input until deals can be created.
-- **Reference data is seeded from the historical artifact the rules-documentation phase
-  recorded**, read read-only and cross-checked against that source by an independent
-  reviewer: the global default fee tiers for merchants and traders, the tariff grid, and
-  the twenty configuration keys the source held, of the twenty-one this phase
-  introduces. Only global rows crossed
-  over; merchant- and trader-specific tiers and all their relationship rows were
-  excluded because they reference legacy user ids that do not exist in the new database.
-  Four seeded values differ materially from the built-in defaults, which is why seeding
-  mattered rather than being a formality.
-- **Owner decisions recorded in the specification:** the IPN trigger route now requires
-  the merchant role and ownership of the deal, rather than accepting any authenticated
-  caller as legacy did; trader fee selection prefers an exact match over a wildcard row,
-  matching the specificity rule already accepted on the merchant side; updating default
-  trader percentages no longer flattens each tier's amount range, which legacy did on
-  every save; a rejected fee or tariff change must leave no partial write; the fee
-  statistics route no longer reproduces a crash that legacy hits as soon as one merchant
-  exists; and reference data is seeded from the recorded historical artifact rather than
-  deferred to cutover.
-- **Fee selection itself changed, and it is the most money-visible thing this phase
-  shipped.** Two defects recorded by the rules-documentation phase are now fixed as that
-  phase decided: fee types are chosen by an explicit priority instead of an alphabetical
-  accident that let the default tier beat a merchant's own custom one, so a merchant
-  holding a custom tier is now charged the custom percent; and the range-overlap
-  validation applies to every fee type rather than one. Fee selection is therefore not
-  carried verbatim, unlike the rest of this surface.
-- **Current/next task:** `008-ledger-core` is the next phase in the accepted master
+- **Delivered scope:** the internal double-entry ledger now exists in `services/web`.
+  One migration adds exactly the five tables the schema-baseline phase assigned here -
+  ledger accounts, materialized balances, postings, entries and holds - with their enum
+  types, foreign keys that all refuse cascading deletes, and the fixed platform and
+  external counter-accounts seeded. A ledger service is the single path that may change
+  a balance or a hold, enforced by a test that fails if any SQL elsewhere in that
+  module touches those five tables. Every operation takes the caller's transaction handle, so the deal
+  creation of phase 009 can run selection, the availability check, the hold, the
+  counterparty slot, the limit spend and the insert as one transaction.
+- **Posting legs sum to exactly zero at ledger precision by construction, not by luck
+  of rounding.** The two fee values are quantized first and all three legs are derived
+  from the quantized values, so no leg is independently rounded. A zero-valued leg is
+  omitted rather than written, which means a settlement whose merchant and trader
+  percentages are equal records two entries instead of failing; and the platform revenue
+  account may go negative, so an inverted tariff still settles rather than stranding a
+  confirmed deal. Both of those were found by specification review before any code
+  existed - as written first, the schema could not have recorded either case.
+- **Available funds now have one definition** - balance minus the sum of active holds,
+  clamped at zero - replacing the five mutually inconsistent expressions the legacy
+  system maintained, one of which silently omitted deal reservations and was the
+  concrete mechanism of balance drift. The availability check and the hold happen in one
+  transaction, with balances locked in a fixed order and the hold total read after the
+  lock is taken. That ordering is the whole substance of the fix for the legacy race
+  where two concurrent deals could both pass a balance check.
+- **Every money event is idempotent by its reference.** A repeat returns the existing
+  posting and moves nothing; the same reference carrying a different set of legs is
+  refused rather than silently overwritten, matching the accepted rule that money is
+  never auto-corrected. The discriminator compares the full set of accounts and signed
+  amounts, so a repeat that carries the same total but is addressed to a different
+  account is caught rather than accepted as a duplicate.
+- **Insurance became a hold instead of a transfer.** In the legacy system the unpaid
+  remainder of a trader's insurance was moved on-chain into a platform wallet, so it
+  left the trader's ownership. The accepted architecture reverses this: the sum stays the
+  trader's property and is only blocked. The hold is recalculated after every deposit
+  credit, unconditionally - it never consults available funds, so the total held may
+  exceed the balance and available simply clamps to zero. What should be *gated* on an
+  underfunded insurance hold is deliberately not decided here; it belongs to the deal
+  flow.
+- **Two primitives ship deliberately unreachable.** The insurance forfeiture and the
+  manual adjustment have no caller, no endpoint and no automatic path, so nothing in
+  this phase can move a trader's money. Forfeiture in particular has no legacy
+  behavior to port and no phase owns it: what event forfeits a trader's collateral and
+  who may authorize it is undecided, and the specification obliges the first phase that
+  wants to call it to obtain that decision before doing so.
+- **A required CI run went red and was repaired.** The failure was in a pre-existing
+  test of the merchant authentication suite, unrelated to the ledger: the way it
+  constructed an invalid value was not guaranteed to differ from the valid one, so it
+  intermittently asserted a rejection against a request that had legitimately
+  succeeded. An independent review confirmed the product itself was correct before the
+  repair was pushed. The fix is confined to the test, which now fails loudly if the
+  value it alters is not actually different.
+- **Current/next task:** `009-deal-flow-v2` is the next phase in the accepted master
   plan. It has not been started, and no specification for it exists at this checkpoint.
-- **Next action:** run phase 008 - ledger accounts, postings, holds, balances and the
-  ledger service.
+- **Next action:** run phase 009 - requisite selection, atomic deal creation, the single
+  deal-confirmation path, expiry, admin actions, settlement, counterparty slots and
+  requisite blocking.
 
 ### Phase boundaries deliberately held
 
 Structure exists in the baseline where behavior does not. A table being present
 is not evidence that its behavior is implemented.
 
-- No ledger, accounts or holds before phase 008.
+- The ledger exists from phase 008, but it has no production caller yet. Nothing
+  in the running service creates an account, credits a deposit, places a hold or
+  settles a deal: the ledger service is not wired into the composition root, and
+  its only callers are tests. Balances are therefore all zero and will stay so
+  until phase 009 creates deals and phase 012 credits deposits.
+- The insurance forfeiture and the manual adjustment are primitives with no
+  caller and no endpoint. Do not wire either to anything without the owner
+  decision the phase-008 specification requires first - forfeiture moves a
+  trader's collateral to the platform and no phase owns the rule for when that
+  is allowed.
 - Requisites, devices and their parsers are delivered by phase 006. Deal flow is
   not: the notification path stops before deal matching, so nothing in phase 006
   confirms a deal, releases funds or dispatches an IPN.
 - The merchant public API exists but cannot create a deal, and neither dispute
-  endpoint is ported: atomic deal creation belongs to phase 009 and the money
-  beneath it to phase 008. It cannot create a real deal; only the
+  endpoint is ported: atomic deal creation belongs to phase 009, and the money
+  beneath it now exists. It cannot create a real deal; only the
   sandbox answers a simulated one. The authentication middleware for that surface is
   mounted and tested while its only business route is still absent.
 - No `requisite_block`, no `requisite_contragent_slot`, and no deal-flow policy
@@ -178,10 +195,10 @@ Completed architecture/specification milestones:
   surface is ported, the removals the master task requires are done and
   enforced by a test, and the three behavior changes worth making were decided
   by the owner rather than by the implementation.
-- Still in force from task 005, because phase 008 sits next to it: a
-  trader or merchant created in v2 keeps the legacy insurance minimum instead of
-  zero, as a fixed value, so the future ledger does not find them with no requirement
-  at all.
+- Still in force from task 005: a trader or merchant created in v2 keeps the
+  legacy insurance minimum instead of zero, as a fixed value, so nobody exists
+  without an insurance requirement. The ledger of phase 008 now reads that value
+  and holds it.
 - Task 006 completed and remotely verified: requisites, devices, device logging and
   the bank-notification parsers are ported with the device cryptographic contract
   unchanged, the bank catalogue is seeded, and every deliberate departure from legacy
@@ -191,6 +208,14 @@ Completed architecture/specification milestones:
   outbox, the reference data was seeded from the recorded historical artifact and
   cross-checked against it independently, and six departures from legacy were
   decided by the owner rather than by the implementation.
+- Task 008 completed and remotely verified: the double-entry ledger, holds and
+  materialized balances exist behind a single service, every money event is
+  idempotent by reference, available funds have one definition instead of five,
+  and insurance became a hold the trader still owns. Two owner-level questions
+  were identified and deliberately left undecided rather than answered by the
+  implementation - what forfeits a trader's insurance, and what deleting a user
+  with ledger history should do - each recorded as an obligation on the phase
+  that first needs the answer.
 
 ## Known traps
 
@@ -335,6 +360,55 @@ Completed architecture/specification milestones:
   engine rather than under the panel's route group; moving them under it changes
   observable behavior for live integrations, and middleware coverage for that surface
   is a production-hardening item rather than a porting-phase change.
+
+- Phase 008 added the ledger, and its traps are mostly about how the rest of the
+  system must call it. The ledger service is the only path that may change a
+  balance or a hold, and a guard test fails if any SQL elsewhere in that module
+  touches the five ledger tables - the fix for a "just this once" direct update is to add the
+  operation to the service, not to widen the guard's owner list.
+- Every ledger operation takes the **caller's** transaction handle and does not
+  commit. That is required so deal creation can run selection, the availability
+  check, the hold, the counterparty slot, the limit spend and the insert as one
+  unit - but it means the caller owns the commit, and a forgotten one silently
+  discards money movement that looked applied.
+- Every deposit, settlement and withdrawal takes an exclusive row lock on a shared
+  counter-account balance for the duration of the caller's transaction, so all
+  deposits serialize against each other, as do all settlements and all
+  withdrawals. Do not wrap slow work - a network call, an external API, a long
+  scan - around a ledger call.
+- Posting references are unique, and one of them is an identifier minted in the
+  custody service's own database. If that side ever re-issues an identifier, the
+  event is silently accepted as a duplicate and the money is never credited. The
+  phases that build the deposit path must make the reference globally unique or
+  prove re-issue is impossible.
+- The insurance hold is recalculated **unconditionally** after a deposit credit and
+  never consults available funds, so the total held can exceed the balance and
+  available simply clamps to zero. Making it respect available would change how
+  much a trader may withdraw and is an owner decision, not a tidy-up. What should
+  be blocked when insurance is underfunded is deliberately still undecided.
+- A settlement does not always have three legs: a zero-valued leg is omitted, so
+  equal merchant and trader percentages produce two entries. The platform revenue
+  account is also allowed to go negative, so an inverted tariff still settles. Code
+  or tests that assume three legs, or a non-negative platform balance, are wrong.
+- Once a trader has a ledger account, deleting that user answers a conflict rather
+  than succeeding. The phase that first creates accounts for real must obtain the
+  owner's decision on what deleting a user with ledger history should do; deleting
+  the ledger rows to preserve the old answer is deletion of financial records
+  through user management.
+- Balance rows are created lazily by the first operation that locks an account, not
+  when the account is created. A test that asserts against a balance row without
+  running a real operation first updates zero rows, sees no error, and proves
+  nothing, while appearing to assert something.
+- A test that constructs an "invalid" value must guarantee it actually differs from
+  the valid one. A pre-existing authentication test altered a value in a way that
+  was occasionally a no-op, and so intermittently asserted a rejection against a
+  request that had legitimately succeeded. It failed a required CI run
+  intermittently.
+- Before recording an acceptance check as unrunnable in this environment, re-read
+  the project instructions rather than concluding from a failed connection attempt.
+  Phase 007 deferred its database-backed verification to CI on the belief that the
+  integration database was out of reach; phase 008 found it reachable and verified
+  every criterion locally before committing.
 
 ## AI development workflow
 
