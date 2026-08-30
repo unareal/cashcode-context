@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-08-29
+Last updated: 2026-08-30
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -71,47 +71,61 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `006-port-requisites-devices`, phase 5 of the accepted
+- **Completed phase:** `007-port-merchant-api-fees-rates`, phase 6 of the accepted
   financial-core redesign program.
-- **Implementation:** commit
-  `3b26602a198136201476d4a5c0fb0cd52b28d31b`. The private branch is clean and
+- **Implementation:** commits
+  `da0e9f4d9fb0e41b4befb42f7869349b560f25ef` and
+  `6a44ef8a62e8554c46fa7cbb853c39d3dc826da5`. The private branch is clean and
   synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33237242876` on that exact commit,
-  concluded **success** across all three jobs (guards and contract, web,
-  crypto).
-- **Delivered scope:** the requisite, device, device-logging and bank-notification
-  parser surface now lives in `services/web`, on the phase-004 schema. One hundred
-  routes across the public, Android device, web device-management, trader, admin,
-  team-lead and support-admin groups reproduce the legacy wire contract - status
-  codes, error codes and message strings - and a route inventory test compares the
-  registered set against the specification in both directions. New in the module:
-  the device authentication and QR packages, the SMS parser, the in-memory device
-  status store, a single device reaper worker, the requisite audit allowlist, and
-  the migration that seeds the bank catalogue. No other migration was needed: every
-  other table the phase uses already existed in the schema baseline.
-- **The device authentication and pairing contract is carried unchanged**, because
-  the installed Android clients depend on it. Its details live in the private phase
-  specification and in the repository evidence, not here; what a fresh session needs
-  is in the traps below.
-- The legacy tree had no tests for the bank-notification parsers, so the SMS parser
-  port is pinned by a golden corpus captured by running the frozen parser itself;
-  that corpus, not an argument, is the port's correctness evidence.
-- **Owner decisions recorded in the specification:** device log bodies are not
-  stored in v2, only the aggregate counters and status on the device row, and the
-  admin log viewing and export surface is not ported; the bank catalogue is seeded
-  from the real legacy reference data rather than from defaults, because one of its
-  flags governs whether a trader may create an SBP requisite and requisite creation
-  validates the submitted bank against the catalogue; an unauthenticated debug log
-  route and two endpoints with no client are not ported; requisite creation and the
-  write of its chosen tariff rows are one atomic operation, because a requisite left
-  with no tariff rows would accept every tariff instead of none; and a known defect
-  in the interval priority scale is carried as is, its fix left to the phase that
-  owns limit enforcement.
-- **Current/next task:** `007-port-merchant-api-fees-rates` is the next phase in the
-  accepted master plan. It has not been started, and no specification for it exists
-  at this checkpoint.
-- **Next action:** run phase 007 - merchant API, sandbox, IPN outbox, widget, fees,
-  exchange rates and system configuration.
+- **Remote verification:** `v2` workflow run `33288629508` on `6a44ef8`, concluded
+  **success** across all three jobs (guards and contract, web, crypto).
+- **Delivered scope:** the merchant-facing non-financial surface now lives in
+  `services/web` on the phase-004 schema. Seventy-two routes reproduce the legacy wire
+  contract - status codes, error codes and message strings - across the merchant public
+  API and its sandbox, the widget, fees and tariff rates, exchange rates, system
+  configuration, and the merchant settings and IPN panel routes. A route inventory test
+  compares the registered set against the specification in both directions. New in the
+  module: the merchant API authentication packages, the exchange-rate service with a
+  provider interface and an injected HTTP client so no test reaches a real exchange, the
+  fee resolution and validation services, the system configuration registry and
+  accessor, the widget service and token store, the IPN outbox with its dispatcher
+  worker, and two migrations - the outbox table and the reference-data seed.
+- **IPN delivery is now durable.** Legacy sent it inline or from bare goroutines and
+  persisted nothing. v2 enqueues into an outbox table, and a dispatcher worker claims
+  rows under a lease, sends outside the transaction and records the result, so delivery
+  survives a restart. The wire contract - headers, payload fields, the five attempts and
+  the quadratic backoff - is carried unchanged. The producers arrive with the deal
+  lifecycle, so the outbox ships with no producer beyond the manual merchant trigger,
+  which is ported but has no reachable input until deals can be created.
+- **Reference data is seeded from the historical artifact the rules-documentation phase
+  recorded**, read read-only and cross-checked against that source by an independent
+  reviewer: the global default fee tiers for merchants and traders, the tariff grid, and
+  the twenty configuration keys the source held, of the twenty-one this phase
+  introduces. Only global rows crossed
+  over; merchant- and trader-specific tiers and all their relationship rows were
+  excluded because they reference legacy user ids that do not exist in the new database.
+  Four seeded values differ materially from the built-in defaults, which is why seeding
+  mattered rather than being a formality.
+- **Owner decisions recorded in the specification:** the IPN trigger route now requires
+  the merchant role and ownership of the deal, rather than accepting any authenticated
+  caller as legacy did; trader fee selection prefers an exact match over a wildcard row,
+  matching the specificity rule already accepted on the merchant side; updating default
+  trader percentages no longer flattens each tier's amount range, which legacy did on
+  every save; a rejected fee or tariff change must leave no partial write; the fee
+  statistics route no longer reproduces a crash that legacy hits as soon as one merchant
+  exists; and reference data is seeded from the recorded historical artifact rather than
+  deferred to cutover.
+- **Fee selection itself changed, and it is the most money-visible thing this phase
+  shipped.** Two defects recorded by the rules-documentation phase are now fixed as that
+  phase decided: fee types are chosen by an explicit priority instead of an alphabetical
+  accident that let the default tier beat a merchant's own custom one, so a merchant
+  holding a custom tier is now charged the custom percent; and the range-overlap
+  validation applies to every fee type rather than one. Fee selection is therefore not
+  carried verbatim, unlike the rest of this surface.
+- **Current/next task:** `008-ledger-core` is the next phase in the accepted master
+  plan. It has not been started, and no specification for it exists at this checkpoint.
+- **Next action:** run phase 008 - ledger accounts, postings, holds, balances and the
+  ledger service.
 
 ### Phase boundaries deliberately held
 
@@ -122,6 +136,11 @@ is not evidence that its behavior is implemented.
 - Requisites, devices and their parsers are delivered by phase 006. Deal flow is
   not: the notification path stops before deal matching, so nothing in phase 006
   confirms a deal, releases funds or dispatches an IPN.
+- The merchant public API exists but cannot create a deal, and neither dispute
+  endpoint is ported: atomic deal creation belongs to phase 009 and the money
+  beneath it to phase 008. It cannot create a real deal; only the
+  sandbox answers a simulated one. The authentication middleware for that surface is
+  mounted and tested while its only business route is still absent.
 - No `requisite_block`, no `requisite_contragent_slot`, and no deal-flow policy
   before phase 009: requisite selection, limit spending, expired counters,
   auto-blocking and counterparty binding are all absent, and the tables that
@@ -129,10 +148,12 @@ is not evidence that its behavior is implemented.
 - The legacy financial-statistics triggers, wallet and queue structures,
   batch/MultiSend, per-deal on-chain settlement and the withdrawal model are not
   present and are not scheduled before their own phases.
-- The baseline seeded no reference data. Bank display names were supplied by phase
-  006; tariff rates and entity fees belong to phase 007; each system configuration
-  key is defined and supplied by the phase that introduces the behavior depending on
-  it, with no bulk import of legacy configuration.
+- The baseline seeded no reference data. Bank display names were supplied by
+  phase 006, and the global fee tiers, the tariff grid and this phase's
+  configuration keys by phase 007. Each system configuration key is still defined
+  and supplied by the phase that introduces the behavior depending on it; there is
+  no bulk import of legacy configuration, and a key the source did not hold stays
+  on its built-in default.
 
 Completed architecture/specification milestones:
 
@@ -157,7 +178,7 @@ Completed architecture/specification milestones:
   surface is ported, the removals the master task requires are done and
   enforced by a test, and the three behavior changes worth making were decided
   by the owner rather than by the implementation.
-- Still in force from task 005, because phase 007 and phase 008 sit next to it: a
+- Still in force from task 005, because phase 008 sits next to it: a
   trader or merchant created in v2 keeps the legacy insurance minimum instead of
   zero, as a fixed value, so the future ledger does not find them with no requirement
   at all.
@@ -165,6 +186,11 @@ Completed architecture/specification milestones:
   the bank-notification parsers are ported with the device cryptographic contract
   unchanged, the bank catalogue is seeded, and every deliberate departure from legacy
   is recorded in the specification with the evidence behind it.
+- Task 007 completed and remotely verified: the merchant API, sandbox, widget, fees,
+  exchange rates and system configuration are ported, IPN delivery became a durable
+  outbox, the reference data was seeded from the recorded historical artifact and
+  cross-checked against it independently, and six departures from legacy were
+  decided by the owner rather than by the implementation.
 
 ## Known traps
 
@@ -272,6 +298,43 @@ Completed architecture/specification milestones:
   carry it, and cite the line it came from.
 - Do not add a device-log table because the ingestion endpoint appears to need one:
   the bodies are deliberately not stored (see the checkpoint above).
+
+- Phase 007 added its own carried quirks and traps. Money and rates cross the wire as
+  **quoted JSON strings with trailing zeros trimmed**, so a stored `1000.00` is emitted
+  as `"1000"`; a test or client expecting the stored scale, or a JSON number, is wrong
+  rather than the code. The sandbox settlement amount is computed in floating point and
+  only then converted, so it carries float artifacts verbatim - the phase that
+  implements real settlement must not inherit that chain when it implements the accepted
+  identity of amount, fees and settled sum.
+- The typed configuration read path is cached for five minutes in v2 where legacy read
+  through on every call. A configuration change made outside the process - by direct SQL,
+  or by the admin route on another instance - therefore takes effect up to five minutes
+  later, on every key except the three widget ones, which keep an uncached path. The
+  writing process refreshes its own cache, so the admin route stays self-consistent.
+- The seeded fee tier grid has **deliberate coverage gaps** carried from the source: an
+  amount falling between two tiers matches none of them and drops to the configured
+  default percent. Closing the gaps would change what merchants are charged and is an
+  owner decision, not tidying. The tier validation rejects genuine overlaps only.
+- The IPN history endpoint always answers an empty list, exactly as legacy does even
+  though v2 now has durable delivery state behind it. Serving real rows from the outbox
+  would be new merchant-visible behavior.
+- Widget expiry has a write on the refusal path: a read that discovers an expired token
+  deactivates it, so the first read answers "not found" and the next answers a server
+  error for an inactive token. That write must **commit even though the read is
+  refused**. Wrapping the check in a transaction that rolls back on refusal discards the
+  deactivation and leaves the token live forever, while looking correct in review - this
+  is exactly the defect the first CI run caught.
+- IPN retry pauses are quantised to the dispatcher's polling interval, so the shortest
+  legacy pauses are unreachable and each pause is the legacy pause rounded up to a tick.
+  Delivery is at-least-once by construction: a process that dies after claiming a row
+  retries it when the lease expires.
+- The admin fee routes render every service error as a server error, including a
+  rejected tier overlap, and one legacy error message on the bank-fee routes is
+  unreachable because the comparison that would select it never matches. Both are
+  carried deliberately. The merchant public API and the sandbox are registered on the
+  engine rather than under the panel's route group; moving them under it changes
+  observable behavior for live integrations, and middleware coverage for that surface
+  is a production-hardening item rather than a porting-phase change.
 
 ## AI development workflow
 
