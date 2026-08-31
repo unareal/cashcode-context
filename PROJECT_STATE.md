@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -71,58 +71,63 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `009-deal-flow-v2`, phase 8 of the accepted financial-core
+- **Completed phase:** `010-crypto-protocol`, phase 9 of the accepted financial-core
   redesign program.
-- **Implementation:** commit `6992860e6f5c55c302de2b91c8c3ca1a95a36db1`. The private
+- **Implementation:** commit `cee0e369ef521aba331e6f29daf2526ac495e918`. The private
   branch is clean and synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33365132648` on `6992860`, concluded
+- **Remote verification:** `v2` workflow run `33390675046` on `cee0e36`, concluded
   **success** across all three jobs (guards and contract, web, crypto), first time,
   with no repair round.
-- **The phase was split by owner decision.** As accepted, this phase had inherited
-  the entire dispute subsystem, the deal read surface for four audiences and several
-  administrative route sets from earlier specifications. Only the money core was
-  built here; everything non-monetary moved to a new phase
-  `017-deal-read-and-disputes`, so that the code which moves money is reviewed and
-  CI-verified on its own rather than inside a large reporting surface.
-- **Delivered scope:** `services/web` can now create and confirm deals. It had the
-  whole schema and no path that could insert a deal - its deal store held three read
-  queries and one widget flag update.
-- **Creation is one indivisible transaction that owns its own commit.** Requisite
-  selection, the ledger availability check, the deal hold, the counterparty slot, the
-  limit spend and the insert run as a single unit; any failure rolls all of it back
-  and answers the merchant exactly as before, with no row, no hold and no counter
-  movement left behind. The legacy path had a three-statement transaction with
-  selection, fees and the duplicate guard outside it.
-- **One deterministic lock order** across creation, confirmation and expiry, with the
-  ledger call last. It closes two production-only deadlock cycles that cannot be
-  reproduced by any black-box test, so the ordering is written down and verified by
-  independent code review - the owner explicitly refused a test-only synchronisation
-  point inside a production SQL function to make them reproducible.
-- **The four uncoordinated legacy paths into SUCCESS became one confirmation path**
-  with an explicit transition table and the status precondition inside the update
-  statement itself. A repeat confirmation is a whole no-op rather than a second
-  release of funds, and one notification closes at most one deal - the legacy push
-  matcher had no limit and no break, so it closed every open deal of the same amount.
-- **Settlement quantises once at ledger precision and derives the merchant and
-  platform legs by subtraction**, so the postings sum to exactly zero rather than
-  nearly. A finding established during discovery, before the specification was
-  drafted: the hardcoded conversion factor that looked
-  like the legacy settlement rule is computed and discarded on the live path - legacy
-  already stored the fee-derived amount, so adopting the accepted identity preserved
-  behaviour instead of changing it.
-- **Requisite blocking now has separated reasons**, so an automatic dispute unblock
-  can no longer clear an administrator's manual block. The legacy automatic unblock
-  never executed at all: it inserted into a table that does not exist, which aborted
-  the entire dispute resolution.
-- **Counterparty slots are reserved with the deal and released on failure**, ending
-  the overbooking in which the slot was counted at selection and bound only at
-  success. This phase's specification cites nine of the twelve accepted legacy defect
-  fixes; two of those nine it carries forward from the ledger phase rather than
-  introducing, so treat the number as "cited here", not as a running total.
-- **Current/next task:** `010-crypto-protocol` is the next phase in the accepted
+- **Delivered scope:** Web and Crypto can now talk to each other. Before this phase
+  they could not: the shared wire module held a protocol version and four route
+  strings and nothing else, the private listener served only health checks over plain
+  HTTP, and the Crypto client was a configured HTTP client with no protocol methods.
+- **The wire vocabulary is frozen as v1.** The four exchange envelopes, the three
+  outbox command payloads, the five event payloads, the closed error-code set and the
+  pure helpers for canonical encoding, payload hashing, amount form and the deposit
+  reference identity now exist in the shared module, which remains standard-library
+  only and is guarded twice over to stay that way.
+- **The durable outbox and the inbound event journal exist**, with an atomic claim,
+  an acknowledgement, a lease-based reclaim of work a claimer never acknowledged, and
+  an event journal idempotent by event id. They have no producer yet: deposit-address
+  commands arrive with the deposit phase and withdrawal commands with the withdrawal
+  phase, so the machinery is exercised by tests rather than fed by product code.
+- **The private listener now requires mutual TLS** with a client certificate verified
+  against a configured authority plus a pinned public-key hash from an allowlist, and
+  a floor of TLS 1.3. There is deliberately **no plaintext mode and no environment-keyed
+  escape hatch**: missing or unusable certificate material is a startup failure. The
+  Crypto client pins the Web server the same way, and its default endpoint became an
+  https one, so neither long-running binary starts on defaults until the cutover phase
+  issues real material. The pin allowlist is a list so that rotation needs no
+  simultaneous restart.
+- **The outbox keeps the proof that a command was delivered.** The first claim stamps
+  a timestamp that is never cleared and a counter that only rises, so a lease expiry
+  returns work to the queue without erasing the fact that the custody side already
+  took it. This matters beyond bookkeeping: the withdrawal phase releases a hold on
+  "Crypto never took this", and a queue state alone is not that answer - the recorded
+  predicate is the untouched first-claim stamp. That correction came out of the
+  specification review, before any code existed.
+- **Events are recorded and acknowledged, never applied.** An acknowledgement means
+  durably stored, not acted upon; applying an event to a balance, a deal or a
+  withdrawal belongs to the phases that own those objects. An event of an unknown
+  type is stored rather than refused, so a later phase can drain a backlog rather
+  than discover the custody side has been retrying into a wall.
+- **Refusals were deliberately kept narrow**, because a refusal on this wire is
+  permanent and redelivered forever. Two rules that looked like hygiene were removed
+  or bounded during review for exactly that reason: a demand that the custody-side
+  deposit identifier be a UUID, which contradicts the ledger phase's own choice and
+  would have permanently rejected genuine confirmed deposits; and a demand that an
+  event payload be a JSON object, which would have stalled any later message shape.
+  Status labels are checked for presence and length only, never against a closed set,
+  so a state the withdrawal phase adds later cannot become an unacceptable event.
+- **Reconciliation is the exchange, not a scheduled job.** Both sides carry their
+  open request lists, divergence is recorded and never auto-corrected, and the reconcile
+  endpoint exists; the periodic job waits for the deposit phase, which is where its
+  hot-wallet and unswept inputs come from.
+- **Current/next task:** `011-crypto-core` is the next phase in the accepted
   dependency order. `017-deal-read-and-disputes`, the surface carved out of phase
-  009, is also unstarted and has no specification; by owner decision it is never
-  started automatically, so which of the two runs next is the owner's call.
+  009, is also unstarted and has no specification; by owner decision the next phase is
+  never started automatically, so which of the two runs next is the owner's call.
 - **Next action:** none in flight. The program continues with whichever of those two
   phases the owner selects.
 
@@ -154,6 +159,15 @@ is not evidence that its behavior is implemented.
 - The legacy financial-statistics triggers, wallet and queue structures,
   batch/MultiSend, per-deal on-chain settlement and the withdrawal model are not
   present and are not scheduled before their own phases.
+- The Web-to-Crypto transport exists but carries nothing yet. The outbox has no
+  producer and the event journal has no applier: commands are enqueued by the deposit
+  and withdrawal phases, and events are applied to balances, deals and withdrawal
+  requests by the phases that own those objects. A stored event nobody applies is the
+  designed state, not a gap.
+- The custody service still has one disposable bootstrap table and no request journal,
+  no key handling, no chain client and no pull loop. It can speak the protocol; it has
+  nothing yet to say. The pull loop deliberately waits for the request journal,
+  because claiming work with nowhere durable to put it loses the work.
 - The baseline seeded no reference data. Bank display names were supplied by
   phase 006, and the global fee tiers, the tariff grid and this phase's
   configuration keys by phase 007. Each system configuration key is still defined
@@ -214,6 +228,16 @@ Completed architecture/specification milestones:
   counterparty slot shortage may never refuse an already-accepted dispute, that
   dispute settlement is gated on available funds rather than raw balance, and that
   deleting a user who has ledger history is refused outright.
+- Task 010 completed and remotely verified: the Web-to-Crypto protocol exists. The
+  wire vocabulary is frozen as v1 in the shared module, the durable outbox and the
+  inbound event journal are in place with their idempotency and reclaim rules, the
+  private listener requires mutual TLS with pinned keys and has no plaintext mode, and
+  each side has a fake of the other for tests, since the two are separate modules and
+  no single test can hold both. No owner decision was required: the specification
+  review and the code review resolved every question against the accepted
+  architecture, and the two that touched money - the erased delivery evidence and the
+  UUID demand on a custody-minted deposit identifier - were caught before they
+  shipped.
 
 ## Known traps
 
@@ -449,6 +473,50 @@ Completed architecture/specification milestones:
   this phase were caught only because a test was mutated to prove it discriminated;
   a green test that has never been made to fail proves nothing about the invariant it
   claims to hold.
+
+- Phase 010's traps are about a wire that is now frozen. **A refusal on this protocol
+  is permanent**: the sender retries the same message forever, so every validation rule
+  is also a way to stall the queue, with no operator notified anywhere. The settled
+  split is three-way, and review moved it twice before it was right: the envelope is
+  always checked; the payload of a **known** type is checked narrowly and forward-
+  compatibly - required fields only, unknown fields ignored - because a wrong amount on
+  a deposit event is money and must not be accepted with a log line; the payload of an
+  **unknown** type is not inspected at all. Labels are never checked against a closed
+  set, since the phase that owns the withdrawal state machine will mint labels this
+  phase has never seen.
+- An acknowledgement means **durably stored**, not applied. Anything that treats an
+  ack as "handled" will silently drop events once appliers exist, and an event whose
+  application is permanently impossible is still acknowledged on purpose, so the queue
+  does not stall behind it - it is marked terminal and logged instead. There is no
+  alert transport on Web to carry that logged failure; the cutover phase owns it.
+- **Do not erase the evidence that work was delivered.** Returning an expired claim to
+  the queue must clear only the lease, never the first-claim stamp or the delivery
+  counter. The withdrawal phase decides whether it may release a hold by asking
+  whether the custody side ever took the command, and a queue state alone cannot
+  answer that: the predicate is the first-claim stamp, not the state column.
+- The identifier a deposit event carries is minted in the custody database and is
+  deliberately **not** required to be a UUID - the ledger phase chose an opaque
+  reference for exactly that reason. The on-chain identity travels alongside it so the
+  crediting phase can build a reference no database rebuild can re-issue. Demanding a
+  UUID there rejects genuine confirmed deposits forever, which is how that rule was
+  caught in review rather than in production.
+- Mutual TLS on the private listener has **no off switch by design**, so both
+  long-running binaries refuse to start without certificate material, and the custody
+  client's default endpoint is https. This is deliberate and the cutover phase owns
+  issuing the material; the administrative CLI keeps working without it, because
+  migrations must run before any of that exists. An environment-keyed bypass on a
+  custody boundary is the defect class this project has already been bitten by.
+- Three limits bind the phases that come next, and each is enforced by a refusal, which
+  on this wire means a permanent stall if the other side exceeds it: the pull loop may
+  not build an event batch larger than the frozen maximum, the reconcile request list
+  has its own cap, and the deposit-address command must derive its request id
+  deterministically from the trader, or a retry mints a second command and a second
+  address and breaks "one address per trader".
+- The two services are separate modules and a workspace file is forbidden, so **no
+  single test can run both sides in one process**. Every cross-service test is one
+  real side against a fake of the other; a test that appears to wire the two together
+  is wiring a fake, and the two fakes are shared fixtures the later custody phases
+  build on.
 
 ## AI development workflow
 
