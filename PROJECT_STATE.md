@@ -71,97 +71,86 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `008-ledger-core`, phase 7 of the accepted financial-core
+- **Completed phase:** `009-deal-flow-v2`, phase 8 of the accepted financial-core
   redesign program.
-- **Implementation:** commits `7225ed046daa0a2b3e5865d1e7a54a88e9d2a354` (the phase)
-  and `2365153973d25c9bfe0751b59a3c413061b8ebc7` (a CI repair, below). The private
+- **Implementation:** commit `6992860e6f5c55c302de2b91c8c3ca1a95a36db1`. The private
   branch is clean and synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33300831608` on `2365153`, concluded
-  **success** across all three jobs (guards and contract, web, crypto).
-- **Delivered scope:** the internal double-entry ledger now exists in `services/web`.
-  One migration adds exactly the five tables the schema-baseline phase assigned here -
-  ledger accounts, materialized balances, postings, entries and holds - with their enum
-  types, foreign keys that all refuse cascading deletes, and the fixed platform and
-  external counter-accounts seeded. A ledger service is the single path that may change
-  a balance or a hold, enforced by a test that fails if any SQL elsewhere in that
-  module touches those five tables. Every operation takes the caller's transaction handle, so the deal
-  creation of phase 009 can run selection, the availability check, the hold, the
-  counterparty slot, the limit spend and the insert as one transaction.
-- **Posting legs sum to exactly zero at ledger precision by construction, not by luck
-  of rounding.** The two fee values are quantized first and all three legs are derived
-  from the quantized values, so no leg is independently rounded. A zero-valued leg is
-  omitted rather than written, which means a settlement whose merchant and trader
-  percentages are equal records two entries instead of failing; and the platform revenue
-  account may go negative, so an inverted tariff still settles rather than stranding a
-  confirmed deal. Both of those were found by specification review before any code
-  existed - as written first, the schema could not have recorded either case.
-- **Available funds now have one definition** - balance minus the sum of active holds,
-  clamped at zero - replacing the five mutually inconsistent expressions the legacy
-  system maintained, one of which silently omitted deal reservations and was the
-  concrete mechanism of balance drift. The availability check and the hold happen in one
-  transaction, with balances locked in a fixed order and the hold total read after the
-  lock is taken. That ordering is the whole substance of the fix for the legacy race
-  where two concurrent deals could both pass a balance check.
-- **Every money event is idempotent by its reference.** A repeat returns the existing
-  posting and moves nothing; the same reference carrying a different set of legs is
-  refused rather than silently overwritten, matching the accepted rule that money is
-  never auto-corrected. The discriminator compares the full set of accounts and signed
-  amounts, so a repeat that carries the same total but is addressed to a different
-  account is caught rather than accepted as a duplicate.
-- **Insurance became a hold instead of a transfer.** In the legacy system the unpaid
-  remainder of a trader's insurance was moved on-chain into a platform wallet, so it
-  left the trader's ownership. The accepted architecture reverses this: the sum stays the
-  trader's property and is only blocked. The hold is recalculated after every deposit
-  credit, unconditionally - it never consults available funds, so the total held may
-  exceed the balance and available simply clamps to zero. What should be *gated* on an
-  underfunded insurance hold is deliberately not decided here; it belongs to the deal
-  flow.
-- **Two primitives ship deliberately unreachable.** The insurance forfeiture and the
-  manual adjustment have no caller, no endpoint and no automatic path, so nothing in
-  this phase can move a trader's money. Forfeiture in particular has no legacy
-  behavior to port and no phase owns it: what event forfeits a trader's collateral and
-  who may authorize it is undecided, and the specification obliges the first phase that
-  wants to call it to obtain that decision before doing so.
-- **A required CI run went red and was repaired.** The failure was in a pre-existing
-  test of the merchant authentication suite, unrelated to the ledger: the way it
-  constructed an invalid value was not guaranteed to differ from the valid one, so it
-  intermittently asserted a rejection against a request that had legitimately
-  succeeded. An independent review confirmed the product itself was correct before the
-  repair was pushed. The fix is confined to the test, which now fails loudly if the
-  value it alters is not actually different.
-- **Current/next task:** `009-deal-flow-v2` is the next phase in the accepted master
-  plan. It has not been started, and no specification for it exists at this checkpoint.
-- **Next action:** run phase 009 - requisite selection, atomic deal creation, the single
-  deal-confirmation path, expiry, admin actions, settlement, counterparty slots and
-  requisite blocking.
+- **Remote verification:** `v2` workflow run `33365132648` on `6992860`, concluded
+  **success** across all three jobs (guards and contract, web, crypto), first time,
+  with no repair round.
+- **The phase was split by owner decision.** As accepted, this phase had inherited
+  the entire dispute subsystem, the deal read surface for four audiences and several
+  administrative route sets from earlier specifications. Only the money core was
+  built here; everything non-monetary moved to a new phase
+  `017-deal-read-and-disputes`, so that the code which moves money is reviewed and
+  CI-verified on its own rather than inside a large reporting surface.
+- **Delivered scope:** `services/web` can now create and confirm deals. It had the
+  whole schema and no path that could insert a deal - its deal store held three read
+  queries and one widget flag update.
+- **Creation is one indivisible transaction that owns its own commit.** Requisite
+  selection, the ledger availability check, the deal hold, the counterparty slot, the
+  limit spend and the insert run as a single unit; any failure rolls all of it back
+  and answers the merchant exactly as before, with no row, no hold and no counter
+  movement left behind. The legacy path had a three-statement transaction with
+  selection, fees and the duplicate guard outside it.
+- **One deterministic lock order** across creation, confirmation and expiry, with the
+  ledger call last. It closes two production-only deadlock cycles that cannot be
+  reproduced by any black-box test, so the ordering is written down and verified by
+  independent code review - the owner explicitly refused a test-only synchronisation
+  point inside a production SQL function to make them reproducible.
+- **The four uncoordinated legacy paths into SUCCESS became one confirmation path**
+  with an explicit transition table and the status precondition inside the update
+  statement itself. A repeat confirmation is a whole no-op rather than a second
+  release of funds, and one notification closes at most one deal - the legacy push
+  matcher had no limit and no break, so it closed every open deal of the same amount.
+- **Settlement quantises once at ledger precision and derives the merchant and
+  platform legs by subtraction**, so the postings sum to exactly zero rather than
+  nearly. A finding established during discovery, before the specification was
+  drafted: the hardcoded conversion factor that looked
+  like the legacy settlement rule is computed and discarded on the live path - legacy
+  already stored the fee-derived amount, so adopting the accepted identity preserved
+  behaviour instead of changing it.
+- **Requisite blocking now has separated reasons**, so an automatic dispute unblock
+  can no longer clear an administrator's manual block. The legacy automatic unblock
+  never executed at all: it inserted into a table that does not exist, which aborted
+  the entire dispute resolution.
+- **Counterparty slots are reserved with the deal and released on failure**, ending
+  the overbooking in which the slot was counted at selection and bound only at
+  success. This phase's specification cites nine of the twelve accepted legacy defect
+  fixes; two of those nine it carries forward from the ledger phase rather than
+  introducing, so treat the number as "cited here", not as a running total.
+- **Current/next task:** `010-crypto-protocol` is the next phase in the accepted
+  dependency order. `017-deal-read-and-disputes`, the surface carved out of phase
+  009, is also unstarted and has no specification; by owner decision it is never
+  started automatically, so which of the two runs next is the owner's call.
+- **Next action:** none in flight. The program continues with whichever of those two
+  phases the owner selects.
 
 ### Phase boundaries deliberately held
 
 Structure exists in the baseline where behavior does not. A table being present
 is not evidence that its behavior is implemented.
 
-- The ledger exists from phase 008, but it has no production caller yet. Nothing
-  in the running service creates an account, credits a deposit, places a hold or
-  settles a deal: the ledger service is not wired into the composition root, and
-  its only callers are tests. Balances are therefore all zero and will stay so
-  until phase 009 creates deals and phase 012 credits deposits.
+- The ledger has a production caller from phase 009: deal creation places holds and
+  confirmation settles. Nothing yet **credits** a balance, because deposits arrive in
+  phase 012, so a trader's balance is still zero unless a test puts money there -
+  which means the deal path is exercised but not yet fed.
 - The insurance forfeiture and the manual adjustment are primitives with no
   caller and no endpoint. Do not wire either to anything without the owner
   decision the phase-008 specification requires first - forfeiture moves a
   trader's collateral to the platform and no phase owns the rule for when that
   is allowed.
-- Requisites, devices and their parsers are delivered by phase 006. Deal flow is
-  not: the notification path stops before deal matching, so nothing in phase 006
-  confirms a deal, releases funds or dispatches an IPN.
-- The merchant public API exists but cannot create a deal, and neither dispute
-  endpoint is ported: atomic deal creation belongs to phase 009, and the money
-  beneath it now exists. It cannot create a real deal; only the
-  sandbox answers a simulated one. The authentication middleware for that surface is
-  mounted and tested while its only business route is still absent.
-- No `requisite_block`, no `requisite_contragent_slot`, and no deal-flow policy
-  before phase 009: requisite selection, limit spending, expired counters,
-  auto-blocking and counterparty binding are all absent, and the tables that
-  will carry them have no writer yet.
+- The device-push and SMS notification pipelines now confirm deals; phase 006 had
+  deliberately stopped them at the first access to the deal table.
+- The merchant public API can create a deal. Neither dispute endpoint is ported, and
+  no deal list, detail or read route exists for the trader, merchant, admin or
+  support panels - only the sandbox answers a simulated one. Those belong to
+  `017-deal-read-and-disputes`, together with the dispute subsystem beyond the
+  acceptance path that confirmation itself needs.
+- Requisite selection, limit spending, expired counters, auto-blocking and
+  counterparty binding all exist from phase 009, with their two tables. The
+  administrative routes for trader priorities remain deferred, while the selection
+  semantics that read them are implemented.
 - The legacy financial-statistics triggers, wallet and queue structures,
   batch/MultiSend, per-deal on-chain settlement and the withdrawal model are not
   present and are not scheduled before their own phases.
@@ -215,7 +204,16 @@ Completed architecture/specification milestones:
   were identified and deliberately left undecided rather than answered by the
   implementation - what forfeits a trader's insurance, and what deleting a user
   with ledger history should do - each recorded as an obligation on the phase
-  that first needs the answer.
+  that first needs the answer. Phase 009 has since answered the second; the first
+  is still open because no phase has yet needed it.
+- Task 009 completed and remotely verified: deals can be created and confirmed.
+  The phase was split by owner decision so that the money core carries its own
+  review and CI; the read and dispute surface became `017-deal-read-and-disputes`.
+  Thirteen owner decisions are recorded in its specification - ten substantive, three
+  being renewals of the commit authorization - among them that a
+  counterparty slot shortage may never refuse an already-accepted dispute, that
+  dispute settlement is gated on available funds rather than raw balance, and that
+  deleting a user who has ledger history is refused outright.
 
 ## Known traps
 
@@ -362,10 +360,15 @@ Completed architecture/specification milestones:
   is a production-hardening item rather than a porting-phase change.
 
 - Phase 008 added the ledger, and its traps are mostly about how the rest of the
-  system must call it. The ledger service is the only path that may change a
-  balance or a hold, and a guard test fails if any SQL elsewhere in that module
-  touches the five ledger tables - the fix for a "just this once" direct update is to add the
-  operation to the service, not to widen the guard's owner list.
+  system must call it. The ledger service is the only path that may **change** a
+  balance or a hold, and a guard test fails if any Go code elsewhere names the five
+  ledger tables - the fix for a "just this once" direct update is to add the
+  operation to the service, not to widen the guard's owner list. Reads are narrower
+  than that since phase 009: requisite selection asks for a trader's available funds
+  through one dedicated SQL helper and may not touch the ledger tables itself. That
+  helper is the only place outside the ledger's own migration where SQL may name
+  them, and a separate guard enforces it, because the Go-side guard scans Go
+  sources and cannot see SQL.
 - Every ledger operation takes the **caller's** transaction handle and does not
   commit. That is required so deal creation can run selection, the availability
   check, the hold, the counterparty slot, the limit spend and the insert as one
@@ -384,17 +387,24 @@ Completed architecture/specification milestones:
 - The insurance hold is recalculated **unconditionally** after a deposit credit and
   never consults available funds, so the total held can exceed the balance and
   available simply clamps to zero. Making it respect available would change how
-  much a trader may withdraw and is an owner decision, not a tidy-up. What should
-  be blocked when insurance is underfunded is deliberately still undecided.
+  much a trader may withdraw and is an owner decision, not a tidy-up. What an
+  underfunded insurance hold blocks was settled by the deal-flow phase: nothing
+  extra. Legacy gated only through the trader's available funds, with the unfunded
+  remainder subtracted, and the ledger already reproduces that, so selection filters
+  on available exactly where legacy did and no insurance-specific refusal exists.
 - A settlement does not always have three legs: a zero-valued leg is omitted, so
   equal merchant and trader percentages produce two entries. The platform revenue
   account is also allowed to go negative, so an inverted tariff still settles. Code
   or tests that assume three legs, or a non-negative platform balance, are wrong.
+  Amounts are quantised once and the merchant and platform legs derived by
+  subtraction; independently rounding four values leaves a residue the ledger
+  refuses.
 - Once a trader has a ledger account, deleting that user answers a conflict rather
-  than succeeding. The phase that first creates accounts for real must obtain the
-  owner's decision on what deleting a user with ledger history should do; deleting
-  the ledger rows to preserve the old answer is deletion of financial records
-  through user management.
+  than succeeding, and by owner decision it stays that way: a user with ledger
+  history is not deletable, and the ledger rows are never cascaded or nulled to
+  preserve the old answer, because that is deletion of financial records through
+  user management. Removing such a user from an operational view is a separate
+  archive-or-disable question, not a delete.
 - Balance rows are created lazily by the first operation that locks an account, not
   when the account is created. A test that asserts against a balance row without
   running a real operation first updates zero rows, sees no error, and proves
@@ -409,6 +419,36 @@ Completed architecture/specification milestones:
   Phase 007 deferred its database-backed verification to CI on the belief that the
   integration database was out of reach; phase 008 found it reachable and verified
   every criterion locally before committing.
+- Phase 009's traps are mostly about the deal transaction. Creation is **one**
+  transaction that owns its commit, and every ledger call takes the caller's handle;
+  splitting it, or calling the ledger on the pool instead, silently breaks the
+  atomicity the whole financial model rests on. The lock order across creation,
+  confirmation and expiry is fixed and deliberate: the ledger call is last, expiry
+  locks the requisite row explicitly, and confirmation locks the counterparty row as
+  its very first statement. Each of those two statements exists solely to prevent a
+  deadlock cycle that no test can construct, so removing one as redundant reopens a
+  production-only failure.
+- Releasing a counterparty slot must be a state-column update, never delete-and-
+  recreate and never a rewrite of its deal or counterparty reference: the database
+  re-takes a parent lock only when key columns change, so the "equivalent" rewrite
+  restores the very deadlock the ordering removes.
+- A limit check and the spend it guards must read the same clock and the same locked
+  status. Two clock samples across an interval boundary, or a check keyed on an
+  unlocked read, each land the counter one deal above its limit. Both were real
+  defects here, not hypotheses.
+- A deal can reach success without a counterparty binding, and that fact is recorded
+  rather than silent. The money outcome matches legacy, which also failed to bind and
+  ignored the failure; what changed is that the absence is now observable. Do not
+  "fix" it into a refusal: an owner decision states that a routing capacity limit
+  never blocks settlement of an accepted dispute.
+- The sandbox and the administrative rate preview keep the old hardcoded conversion
+  factor deliberately. The live path never used it - it computed and discarded it -
+  so the two are not inconsistent, and aligning the sandbox would change a contract
+  the redesign declares unchanged.
+- Tests that verify a race must be shown to fail without the fix. Several defects in
+  this phase were caught only because a test was mutated to prove it discriminated;
+  a green test that has never been made to fail proves nothing about the invariant it
+  claims to hold.
 
 ## AI development workflow
 
