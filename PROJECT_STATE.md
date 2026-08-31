@@ -71,63 +71,65 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `010-crypto-protocol`, phase 9 of the accepted financial-core
+- **Completed phase:** `011-crypto-core`, phase 10 of the accepted financial-core
   redesign program.
-- **Implementation:** commit `cee0e369ef521aba331e6f29daf2526ac495e918`. The private
+- **Implementation:** commit `e3f142da237acc584b0b4a0a8fd7545fbac23f20`. The private
   branch is clean and synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33390675046` on `cee0e36`, concluded
+- **Remote verification:** `v2` workflow run `33431346559` on `e3f142d`, concluded
   **success** across all three jobs (guards and contract, web, crypto), first time,
   with no repair round.
-- **Delivered scope:** Web and Crypto can now talk to each other. Before this phase
-  they could not: the shared wire module held a protocol version and four route
-  strings and nothing else, the private listener served only health checks over plain
-  HTTP, and the Crypto client was a configured HTTP client with no protocol methods.
-- **The wire vocabulary is frozen as v1.** The four exchange envelopes, the three
-  outbox command payloads, the five event payloads, the closed error-code set and the
-  pure helpers for canonical encoding, payload hashing, amount form and the deposit
-  reference identity now exist in the shared module, which remains standard-library
-  only and is guarded twice over to stay that way.
-- **The durable outbox and the inbound event journal exist**, with an atomic claim,
-  an acknowledgement, a lease-based reclaim of work a claimer never acknowledged, and
-  an event journal idempotent by event id. They have no producer yet: deposit-address
-  commands arrive with the deposit phase and withdrawal commands with the withdrawal
-  phase, so the machinery is exercised by tests rather than fed by product code.
-- **The private listener now requires mutual TLS** with a client certificate verified
-  against a configured authority plus a pinned public-key hash from an allowlist, and
-  a floor of TLS 1.3. There is deliberately **no plaintext mode and no environment-keyed
-  escape hatch**: missing or unusable certificate material is a startup failure. The
-  Crypto client pins the Web server the same way, and its default endpoint became an
-  https one, so neither long-running binary starts on defaults until the cutover phase
-  issues real material. The pin allowlist is a list so that rotation needs no
-  simultaneous restart.
-- **The outbox keeps the proof that a command was delivered.** The first claim stamps
-  a timestamp that is never cleared and a counter that only rises, so a lease expiry
-  returns work to the queue without erasing the fact that the custody side already
-  took it. This matters beyond bookkeeping: the withdrawal phase releases a hold on
-  "Crypto never took this", and a queue state alone is not that answer - the recorded
-  predicate is the untouched first-claim stamp. That correction came out of the
-  specification review, before any code existed.
-- **Events are recorded and acknowledged, never applied.** An acknowledgement means
-  durably stored, not acted upon; applying an event to a balance, a deal or a
-  withdrawal belongs to the phases that own those objects. An event of an unknown
-  type is stored rather than refused, so a later phase can drain a backlog rather
-  than discover the custody side has been retrying into a wall.
-- **Refusals were deliberately kept narrow**, because a refusal on this wire is
-  permanent and redelivered forever. Two rules that looked like hygiene were removed
-  or bounded during review for exactly that reason: a demand that the custody-side
-  deposit identifier be a UUID, which contradicts the ledger phase's own choice and
-  would have permanently rejected genuine confirmed deposits; and a demand that an
-  event payload be a JSON object, which would have stalled any later message shape.
-  Status labels are checked for presence and length only, never against a closed set,
-  so a state the withdrawal phase adds later cannot become an unacceptable event.
-- **Reconciliation is the exchange, not a scheduled job.** Both sides carry their
-  open request lists, divergence is recorded and never auto-corrected, and the reconcile
-  endpoint exists; the periodic job waits for the deposit phase, which is where its
-  hot-wallet and unswept inputs come from.
-- **Current/next task:** `011-crypto-core` is the next phase in the accepted
-  dependency order. `017-deal-read-and-disputes`, the surface carved out of phase
-  009, is also unstarted and has no specification; by owner decision the next phase is
-  never started automatically, so which of the two runs next is the owner's call.
+- **Delivered scope:** the custody service gained its core. Before this phase it held a
+  disposable bootstrap table, a health listener and a protocol client with no caller; it
+  could speak the protocol but had nothing to say. It can now read its own secrets,
+  derive addresses, talk to a chain node, keep a durable request journal, evaluate payout
+  policy, sign, broadcast and track confirmations.
+- **Secrets have one source and no fallback.** The custody material is read from the
+  secret store in every environment, with no environment-keyed escape hatch: missing or
+  unusable material is a startup failure, mirroring the transport decision of phase 010.
+- **Two independent key domains.** A recovery seed derives trader deposit addresses and
+  nothing else; the hot wallet key is a separate secret, deliberately not derived from
+  that seed, so compromising one does not yield the other. Derived private keys are never
+  persisted - the seed is held in memory inside the custody process and keys are derived
+  on demand, and a guard test proves no secret reaches the logs or the database.
+- **Low-level chain code was ported as source, never as an import.** The address codec,
+  validation, public-key-to-address conversion, parameter encoding, unit conversions and
+  signature repacking come from the frozen tree; the legacy amount-encoding truncation was
+  fixed on the way. The node transport was written fresh with typed errors, per-call
+  timeouts and bounded retry, and broadcast is the one call never retried, because
+  retrying it is how a lost answer becomes a second transfer.
+- **The signer computes the transaction id itself and persists it before broadcast.**
+  That is the accepted fix for the legacy defect where a withdrawal was marked complete at
+  broadcast and resent when the answer was lost. Confirmations now separate confirmed,
+  failed-without-transfer and unresolved, rather than collapsing failure into success as
+  the legacy worker did.
+- **Verify what you sign.** The service does not trust the node to have assembled the
+  transaction that was requested: it decodes the returned body itself and proves the
+  operation type, token contract, recipient, amount, sender, fee bounds and the absence of
+  any additional action match the authorised request, refusing deterministically otherwise.
+  Comparing the node's answer to itself is not verification - a hostile or confused node
+  would otherwise obtain a signature over a transfer nobody approved, and the payout
+  whitelist would not stop it, because the whitelist is checked against the request while
+  the signature binds the node's bytes.
+- **Two potentially valid payouts for one request can never exist at once.** A rebuild is
+  forbidden until the previous body's expiry plus the node timeout has passed, and a fresh
+  lookup runs immediately before it; a transaction found on the network resumes normal
+  confirmation tracking instead of producing a second one.
+- **Policy limits are catastrophe caps, not business limits.** They live only on the
+  custody side and no business API can change them. The privileged treasury override
+  raises the per-operation ceiling alone and bypasses nothing else - which, by design,
+  leaves that raised ceiling unreachable while the lower daily cap still applies. Reserve
+  floors are evaluated against the state after the hypothetical operation, and daily
+  volume counts over a rolling 24-hour window keyed on the approval moment, so waiting for
+  midnight cannot release a second day's worth.
+- **Nothing here can sign in production.** The owner approval that alone authorises a
+  signature belongs to the withdrawal phase, so the signer has no reachable caller yet and
+  nothing enqueues the commands the pull loop would persist. The machinery is exercised by tests, not fed by
+  product code - deliberately, because the trust boundary says the custody side is the
+  last place a payout can be stopped.
+- **Current/next task:** `012-deposits-sweep` is the next phase in the accepted dependency
+  order. `017-deal-read-and-disputes`, the surface carved out of phase 009, is also
+  unstarted and has no specification; by owner decision the next phase is never started
+  automatically, so which of the two runs next is the owner's call.
 - **Next action:** none in flight. The program continues with whichever of those two
   phases the owner selects.
 
@@ -164,10 +166,21 @@ is not evidence that its behavior is implemented.
   and withdrawal phases, and events are applied to balances, deals and withdrawal
   requests by the phases that own those objects. A stored event nobody applies is the
   designed state, not a gap.
-- The custody service still has one disposable bootstrap table and no request journal,
-  no key handling, no chain client and no pull loop. It can speak the protocol; it has
-  nothing yet to say. The pull loop deliberately waits for the request journal,
-  because claiming work with nowhere durable to put it loses the work.
+- The custody service now has its request journal, key handling, chain client, policy,
+  signer and pull loop, but no producer and no signing trigger. Deposit addresses, the
+  scanner and sweep belong to the deposit phase; the owner approval that authorises a
+  signature belongs to the withdrawal phase. The pull loop runs and claims nothing,
+  because nothing enqueues yet - that is the designed state, not a gap. Reconciliation is
+  still the exchange rather than a scheduled job: the endpoint exists and the open-request
+  lists now travel on every exchange, but the periodic job waits for the deposit phase,
+  which is where its hot-wallet and unswept inputs come from.
+- Two known limitations are inputs to the withdrawal phase rather than defects here, and
+  both are unreachable while nothing can sign: a pre-signature refusal reaches no landing
+  state at all - repeating without bound when it comes from recovery, and falling silent
+  after one record when it comes from the send path - and a crash between approval and
+  signature strands the request with no automatic re-drive. Both keep the hold, so money is frozen rather than
+  lost, and both need the reachable path the withdrawal phase introduces before they
+  matter.
 - The baseline seeded no reference data. Bank display names were supplied by
   phase 006, and the global fee tiers, the tariff grid and this phase's
   configuration keys by phase 007. Each system configuration key is still defined
@@ -238,6 +251,12 @@ Completed architecture/specification milestones:
   architecture, and the two that touched money - the erased delivery evidence and the
   UUID demand on a custody-minted deposit identifier - were caught before they
   shipped.
+- Task 011 completed and remotely verified: the custody core exists. Secrets have one
+  source and no fallback, the two key domains are independent, the transaction id is
+  computed locally and persisted before broadcast, and the service verifies the body it is
+  about to sign instead of trusting the node that assembled it. The independent review
+  found both the unverified-body hole and a window in which one request could be paid
+  twice; the owner chose to close both inside this phase rather than defer them.
 
 ## Known traps
 
@@ -517,6 +536,31 @@ Completed architecture/specification milestones:
   real side against a fake of the other; a test that appears to wire the two together
   is wiring a fake, and the two fakes are shared fixtures the later custody phases
   build on.
+- **Never retry a broadcast.** Every other node call may be retried; the one that hands
+  a signed transfer to the network may not, because a retried broadcast is how a lost
+  answer becomes a second payment. A lost answer is resolved by looking the transaction
+  up, never by sending it again.
+- **Compute the transaction id locally and persist it before broadcasting.** It is the
+  hash of the body being signed, so it is knowable before the network sees anything.
+  Persisting it first is what makes a crash recoverable without a second transfer, and
+  it is the accepted fix for the legacy defect that marked a withdrawal complete at
+  broadcast.
+- **Never sign a body on the assembling node's word.** Checking that the node's returned
+  id matches the hash of the node's returned body only proves the answer agrees with
+  itself. The body must be decoded and its operation type, token contract, recipient,
+  amount, sender, fee bounds and action count checked against the authorised request,
+  because a payout whitelist is checked against the request while the signature binds
+  the bytes.
+- **A request whose outcome is unknown keeps its hold.** Unknown-outcome and
+  in-flight states are non-terminal by design; only a terminal state releases or
+  consumes money. Any later manual-resolution tooling must not mint a replacement for a
+  request whose previous transaction may still be accepted, and must reconcile the
+  previous transaction id first.
+- **A body may be replaced only after it can no longer be accepted** - its expiry plus
+  the node timeout - and never while its outcome is still in flight. This is the rule
+  that keeps two potentially valid payouts for one request from existing at once, and
+  the timeout that feeds it is ordinary configuration with no enforced relation to the
+  lifetime the node chooses, so raising it far enough reopens the window.
 
 ## AI development workflow
 
