@@ -56,7 +56,7 @@ disconnects.
 - One immutable request ID and payload represent one merchant, trader, or
   treasury withdrawal. A changed payload under the same ID is a conflict.
 - Web approval is a business gate; explicit owner approval in Telegram on
-  Crypto is the only authorization to sign and broadcast.
+  Crypto is the only authorization to sign and broadcast a payout.
 - A withdrawal hold remains active until a terminal state proves Crypto can no
   longer execute. A cancellation request alone never releases it.
 - `WAITING_FOR_FUNDS` is indefinite and retains the hold. Funds becoming
@@ -71,54 +71,55 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `012-deposits-sweep`, phase 11 of the accepted financial-core
-  redesign program, narrowed by owner decision to the deposit path alone.
-- **Implementation:** commit `d8efecee94020a345477a1b62409fee3fa8f69f2`, preceded by the
-  documentation commit `d836706a3d77e8b6318f53bae31ade0e14f45ec5` that recorded the split.
-  The private branch is clean and synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33477125963` on `d8efece`, concluded
+- **Completed phase:** `018-sweep-trx-float`, the sweep half split out of phase 11 of
+  the accepted financial-core redesign program.
+- **Implementation:** commit `c6f58564fad4955d620c5286286d8f750fdc3503`. The private
+  branch is clean and synchronized with its remote.
+- **Remote verification:** `v2` workflow run `33507973724` on `c6f5856`, concluded
   **success** across all three jobs (guards and contract, web, crypto), first time,
   with no repair round.
-- **The phase was split by the owner.** The master plan's phase-012 entry covered
-  deposits and sweep. It now covers the deposit path only; sweep, TRX float, prefund,
-  their signing, sweep thresholds and unswept alerts became a new phase
-  `018-sweep-trx-float`, appended with the next free number so the numbers of already
-  accepted phases were not shifted. Its dependency position is written out in words
-  because a trailing number must not read as low priority: it runs after 012 and is
-  mandatory before the cutover phase, before production, and before any point where
-  the platform relies on automatic replenishment of the hot wallet from deposit
-  addresses. The reason for the split is risk, not size - the deposit half signs
-  nothing, while the sweep half introduces the first automated signing and broadcast
-  path in the system, and the two should not share one review and one CI run.
-- **Three threshold questions were deliberately left open** and carried into that
-  phase: the sweep threshold and unswept alert levels, the TRX prefund size and float
-  alert level, and the policy boundary for automatic sweep and prefund signing. The
-  values suggested while splitting were explicitly **not** accepted and are not
-  defaults. That phase first collects empirical cost, energy and resource evidence on
-  a stand and only then returns those questions with measurements.
-- **Delivered scope:** a trader deposit becomes a balance. Web enqueues the
-  address command, Crypto derives and returns the address, the chain is watched for
-  incoming USDT, transfers are identified by their on-chain identity, confirmations are
-  tracked to the accepted depth of 19, and the confirmed deposit is credited to the
-  internal ledger exactly once. Before this phase nothing credited a balance at all, so
-  the deal flow existed but was never fed.
-- **Nothing here signs or broadcasts.** The deposit tests assert that no transaction is
-  built or sent anywhere on the deposit path.
-- **The first inbound-event applier exists.** It performs the business write, the ledger
-  credit and the applied marker in one transaction, so a credit cannot be applied twice
-  or left half-done. The protocol journal had no applier at all before this phase.
-- **Ownership follows the destination address.** A confirmed transfer belongs to the
-  trader whose deposit address received it, regardless of sender - the platform's own
-  hot wallet included. A withdrawal that lands back on the trader's own deposit address
-  is credited again, because the withdrawal already debited it; the result is a
-  pointless on-chain round trip and its fee, not a lost user balance. By owner decision,
-  forbidding such a withdrawal - if ever wanted - belongs to the withdrawal policy layer
-  and must never be implemented by withholding a credit for money actually received.
-- **Reconciliation targets the two worst outcomes, not the tidy ones:** a deposit nobody
-  discovered, surfaced as an unexplained address balance, and a confirmed deposit the
-  ledger side refused to credit. A permanently refused event keeps being reported rather
-  than dropping out of the checks.
-- **Current/next task:** `018-sweep-trx-float` and `017-deal-read-and-disputes` are both
+- **What this phase delivers: the platform can now move its own custody funds without a
+  human in the loop.** USDT accumulating on trader deposit addresses is swept to the hot
+  wallet, and those addresses are funded with the small amount of chain resource a sweep
+  needs to pay for itself. Until this phase the hot wallet was never replenished from
+  deposits at all, so the outbound side had only whatever it already held. The path is
+  complete and covered by tests, including a real captured transaction body, but it has
+  not yet been exercised against a live chain - assembly and broadcast against a real
+  node are first proven at the cutover phase.
+- **This is the first automated signing and broadcast path in the system.** Everything
+  before it either signed nothing or required an explicit human approval per
+  transaction. That is why the phase was separated from the deposit half in the first
+  place: the risk profile differs, and the two should not share one review and one CI
+  run.
+- **The two sweep-side operation classes are not payouts and are not treated as such.**
+  They do not consume the payout safety caps that exist to bound outbound loss to third
+  parties, and the payout destination allowlist does not apply to them, because they
+  move value between two locations the platform already controls. By owner decision that
+  is an explicit rule with its own separate safety budgets, never an implicit exemption
+  - a privileged category never quietly bypasses a limit it happens not to be checked
+  against. What replaces the allowlist is stricter, not looser: one destination is
+  computed by the service itself, and the other is re-derived from custody key material
+  before use, so stored data alone can never send money outside the platform's own
+  keys.
+- **The thresholds were set from measurement, not from the estimate the project had been
+  carrying.** The owner refused to accept proposed numbers and required empirical
+  evidence first. A bounded read-only sample of real mainnet transfers showed the
+  resource cost per sweep was about a quarter of what the legacy code assumed - the
+  resource figure legacy carried matched the common case almost exactly, though it was
+  attached to the wrong one of the two cases, and the network's price for that resource
+  had fallen fourfold since. Every threshold, budget and alert level in this phase is
+  configurable and is recorded as a phase baseline to be revisited against real
+  operation, not as an immutable business constant.
+- **What the platform now records about its own costs.** The resource actually consumed
+  by each outbound transaction is stored alongside the fee, so the cutover phase can
+  compare the baseline against real operation and adjust configuration without touching
+  policy.
+- **Cross-system reconciliation now runs.** The daily job that compares the two sides'
+  open work exists and executes, and the Web side stores the custody totals it reports
+  instead of discarding them. Its second input - the amount sitting unswept - only came
+  into existence with this phase, which is why three earlier phases deferred the job to
+  it.
+- **Current/next task:** `013-withdrawals-e2e` and `017-deal-read-and-disputes` are both
   unstarted and have no specification. By owner decision the next phase is never started
   automatically, so which one runs next is the owner's call.
 - **Next action:** none in flight.
@@ -150,22 +151,25 @@ is not evidence that its behavior is implemented.
 - The legacy financial-statistics triggers, wallet and queue structures,
   batch/MultiSend, per-deal on-chain settlement and the withdrawal model are not
   present and are not scheduled before their own phases.
-- The Web-to-Crypto transport now carries the deposit half. The outbox has one
-  producer (the deposit-address command) and the event journal has one applier, which
-  handles the address-created and deposit-confirmed events. The other three event types
-  are stored and deliberately parked with no applier - withdrawal status and cancel
-  rejection until the withdrawal phase, the swept event until `018-sweep-trx-float` - and
-  a stored event nobody applies remains the designed state for those.
-- The custody service now derives deposit addresses, watches the chain and tracks
-  deposit confirmations, and its pull loop has real work to claim. It still has **no
-  signing trigger**: the owner approval that alone authorises a signature belongs to the
-  withdrawal phase, and sweep - the other thing that would sign - belongs to
-  `018-sweep-trx-float`. Deposit-specific reconciliation now runs on a schedule on both
-  sides. What moved to `018` is the daily **cross-system** job and the receiver of the
-  hot-wallet and unswept sums, because the second of those sums does not exist until
-  that phase introduces it.
+- An inbound event applier performs whatever business write and ledger effect the event
+  carries, together with the applied marker, in one transaction, so nothing can be
+  applied twice or left half-done.
+- The Web-to-Crypto transport carries the deposit half and the sweep notification. The
+  outbox still has one producer (the deposit-address command), because a sweep is decided
+  by the custody side and is not commanded across the wire at all. The event journal now
+  applies the address-created, deposit-confirmed and swept events; the swept one records
+  the fact and deliberately posts nothing to the ledger, since the money was already
+  credited at confirmation. Withdrawal status and cancel rejection are still stored and
+  parked with no applier until the withdrawal phase, and a stored event nobody applies
+  remains the designed state for those.
+- The custody service derives deposit addresses, watches the chain, tracks deposit
+  confirmations, and now signs and broadcasts on its own for the two internal custody
+  operations. The **payout** side still has no signing trigger: the explicit owner
+  approval that alone authorises a payout signature belongs to the withdrawal phase, and
+  nothing in this phase created a path to it. Both the deposit-specific and the daily
+  cross-system reconciliation now run on a schedule.
 - Two known limitations are inputs to the withdrawal phase rather than defects here, and
-  both are unreachable while nothing can sign: a pre-signature refusal reaches no landing
+  both are unreachable while the payout path has no signing trigger: a pre-signature refusal reaches no landing
   state at all - repeating without bound when it comes from recovery, and falling silent
   after one record when it comes from the send path - and a crash between approval and
   signature strands the request with no automatic re-drive. Both keep the hold, so money is frozen rather than
@@ -257,6 +261,19 @@ Completed architecture/specification milestones:
   renewal of the commit authorization. Four independent specification reviews and three
   independent code reviews ran before it shipped, and every fix was checked by
   counterfactual to fail against the implementation it was meant to reject.
+- Task 018 completed and remotely verified: the custody side sweeps and funds itself.
+  Six owner decisions are recorded in its specification. Three shaped the phase before a
+  line was written - that empirical cost evidence had to be gathered before any threshold
+  was accepted, that the sweep-side classes get their own explicit safety budgets rather
+  than an exemption from the payout ones, and the exact structural restriction on where
+  each class may send. The independent reviews earned their place twice over: the
+  specification review caught, before any code existed, that an exhausted global budget
+  would have suspended every address at once instead of the one at fault and that a
+  transient failure during assembly could permanently and silently disable an address,
+  and the code review then caught a real defect in the implementation - each top-up in a
+  batch checked the custody reserve floor against the balance read at the start of the
+  pass, so a batch could individually pass and collectively breach a floor the owner had
+  declared inviolable.
 
 ## Known traps
 
@@ -603,6 +620,27 @@ Completed architecture/specification milestones:
 - A test that renames a table away to simulate a failure is safe only because every
   fixture runs on its own ephemeral database that is dropped afterwards. Do not copy that
   pattern into a suite that shares one database.
+- **Never assert an ordering between a timestamp your service wrote and one a database
+  trigger wrote.** They come from different clocks. A test in this phase compared an
+  operation's service-clock creation time against a trigger-written update time; it
+  passed for hours and then began failing deterministically, with nothing changed on
+  disk, the moment real time crossed the fixture's pinned epoch. Nothing was wrong with
+  the product. Two lessons: derive age only from timestamps your own code supplies, and
+  treat a suite that passes now as unproven against a clock - the failure had been
+  waiting to surface in CI at an arbitrary hour. Pinning a fixture epoch safely in the
+  past, rather than to today, makes the whole hazard unconstructible.
+- A per-item safety check that reads a shared balance once per batch and never subtracts
+  what the batch has already committed will let each item pass while the batch as a whole
+  breaks the limit. Accumulate within the pass, from committed state, rather than
+  re-reading an external source per item.
+- Reserve floors are directional. A check that constrains an operation draining a balance
+  is arithmetically vacuous for one that fills it, and writing it as if it applied to both
+  hides which limit is actually doing the work. State per operation class which floors
+  bind and which are vacuous.
+- A test double and the code it feeds can share the same wrong assumption and agree
+  forever. Where an external format matters, pin it with a real captured sample and prove
+  the tests are not vacuous by deliberately breaking the mapping and watching them fail;
+  encoder-and-decoder symmetry alone proves nothing about absolute correctness.
 
 ## AI development workflow
 
