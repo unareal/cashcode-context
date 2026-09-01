@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -71,77 +71,66 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `011-crypto-core`, phase 10 of the accepted financial-core
-  redesign program.
-- **Implementation:** commit `e3f142da237acc584b0b4a0a8fd7545fbac23f20`. The private
-  branch is clean and synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33431346559` on `e3f142d`, concluded
+- **Completed phase:** `012-deposits-sweep`, phase 11 of the accepted financial-core
+  redesign program, narrowed by owner decision to the deposit path alone.
+- **Implementation:** commit `d8efecee94020a345477a1b62409fee3fa8f69f2`, preceded by the
+  documentation commit `d836706a3d77e8b6318f53bae31ade0e14f45ec5` that recorded the split.
+  The private branch is clean and synchronized with its remote.
+- **Remote verification:** `v2` workflow run `33477125963` on `d8efece`, concluded
   **success** across all three jobs (guards and contract, web, crypto), first time,
   with no repair round.
-- **Delivered scope:** the custody service gained its core. Before this phase it held a
-  disposable bootstrap table, a health listener and a protocol client with no caller; it
-  could speak the protocol but had nothing to say. It can now read its own secrets,
-  derive addresses, talk to a chain node, keep a durable request journal, evaluate payout
-  policy, sign, broadcast and track confirmations.
-- **Secrets have one source and no fallback.** The custody material is read from the
-  secret store in every environment, with no environment-keyed escape hatch: missing or
-  unusable material is a startup failure, mirroring the transport decision of phase 010.
-- **Two independent key domains.** A recovery seed derives trader deposit addresses and
-  nothing else; the hot wallet key is a separate secret, deliberately not derived from
-  that seed, so compromising one does not yield the other. Derived private keys are never
-  persisted - the seed is held in memory inside the custody process and keys are derived
-  on demand, and a guard test proves no secret reaches the logs or the database.
-- **Low-level chain code was ported as source, never as an import.** The address codec,
-  validation, public-key-to-address conversion, parameter encoding, unit conversions and
-  signature repacking come from the frozen tree; the legacy amount-encoding truncation was
-  fixed on the way. The node transport was written fresh with typed errors, per-call
-  timeouts and bounded retry, and broadcast is the one call never retried, because
-  retrying it is how a lost answer becomes a second transfer.
-- **The signer computes the transaction id itself and persists it before broadcast.**
-  That is the accepted fix for the legacy defect where a withdrawal was marked complete at
-  broadcast and resent when the answer was lost. Confirmations now separate confirmed,
-  failed-without-transfer and unresolved, rather than collapsing failure into success as
-  the legacy worker did.
-- **Verify what you sign.** The service does not trust the node to have assembled the
-  transaction that was requested: it decodes the returned body itself and proves the
-  operation type, token contract, recipient, amount, sender, fee bounds and the absence of
-  any additional action match the authorised request, refusing deterministically otherwise.
-  Comparing the node's answer to itself is not verification - a hostile or confused node
-  would otherwise obtain a signature over a transfer nobody approved, and the payout
-  whitelist would not stop it, because the whitelist is checked against the request while
-  the signature binds the node's bytes.
-- **Two potentially valid payouts for one request can never exist at once.** A rebuild is
-  forbidden until the previous body's expiry plus the node timeout has passed, and a fresh
-  lookup runs immediately before it; a transaction found on the network resumes normal
-  confirmation tracking instead of producing a second one.
-- **Policy limits are catastrophe caps, not business limits.** They live only on the
-  custody side and no business API can change them. The privileged treasury override
-  raises the per-operation ceiling alone and bypasses nothing else - which, by design,
-  leaves that raised ceiling unreachable while the lower daily cap still applies. Reserve
-  floors are evaluated against the state after the hypothetical operation, and daily
-  volume counts over a rolling 24-hour window keyed on the approval moment, so waiting for
-  midnight cannot release a second day's worth.
-- **Nothing here can sign in production.** The owner approval that alone authorises a
-  signature belongs to the withdrawal phase, so the signer has no reachable caller yet and
-  nothing enqueues the commands the pull loop would persist. The machinery is exercised by tests, not fed by
-  product code - deliberately, because the trust boundary says the custody side is the
-  last place a payout can be stopped.
-- **Current/next task:** `012-deposits-sweep` is the next phase in the accepted dependency
-  order. `017-deal-read-and-disputes`, the surface carved out of phase 009, is also
-  unstarted and has no specification; by owner decision the next phase is never started
-  automatically, so which of the two runs next is the owner's call.
-- **Next action:** none in flight. The program continues with whichever of those two
-  phases the owner selects.
+- **The phase was split by the owner.** The master plan's phase-012 entry covered
+  deposits and sweep. It now covers the deposit path only; sweep, TRX float, prefund,
+  their signing, sweep thresholds and unswept alerts became a new phase
+  `018-sweep-trx-float`, appended with the next free number so the numbers of already
+  accepted phases were not shifted. Its dependency position is written out in words
+  because a trailing number must not read as low priority: it runs after 012 and is
+  mandatory before the cutover phase, before production, and before any point where
+  the platform relies on automatic replenishment of the hot wallet from deposit
+  addresses. The reason for the split is risk, not size - the deposit half signs
+  nothing, while the sweep half introduces the first automated signing and broadcast
+  path in the system, and the two should not share one review and one CI run.
+- **Three threshold questions were deliberately left open** and carried into that
+  phase: the sweep threshold and unswept alert levels, the TRX prefund size and float
+  alert level, and the policy boundary for automatic sweep and prefund signing. The
+  values suggested while splitting were explicitly **not** accepted and are not
+  defaults. That phase first collects empirical cost, energy and resource evidence on
+  a stand and only then returns those questions with measurements.
+- **Delivered scope:** a trader deposit becomes a balance. Web enqueues the
+  address command, Crypto derives and returns the address, the chain is watched for
+  incoming USDT, transfers are identified by their on-chain identity, confirmations are
+  tracked to the accepted depth of 19, and the confirmed deposit is credited to the
+  internal ledger exactly once. Before this phase nothing credited a balance at all, so
+  the deal flow existed but was never fed.
+- **Nothing here signs or broadcasts.** The deposit tests assert that no transaction is
+  built or sent anywhere on the deposit path.
+- **The first inbound-event applier exists.** It performs the business write, the ledger
+  credit and the applied marker in one transaction, so a credit cannot be applied twice
+  or left half-done. The protocol journal had no applier at all before this phase.
+- **Ownership follows the destination address.** A confirmed transfer belongs to the
+  trader whose deposit address received it, regardless of sender - the platform's own
+  hot wallet included. A withdrawal that lands back on the trader's own deposit address
+  is credited again, because the withdrawal already debited it; the result is a
+  pointless on-chain round trip and its fee, not a lost user balance. By owner decision,
+  forbidding such a withdrawal - if ever wanted - belongs to the withdrawal policy layer
+  and must never be implemented by withholding a credit for money actually received.
+- **Reconciliation targets the two worst outcomes, not the tidy ones:** a deposit nobody
+  discovered, surfaced as an unexplained address balance, and a confirmed deposit the
+  ledger side refused to credit. A permanently refused event keeps being reported rather
+  than dropping out of the checks.
+- **Current/next task:** `018-sweep-trx-float` and `017-deal-read-and-disputes` are both
+  unstarted and have no specification. By owner decision the next phase is never started
+  automatically, so which one runs next is the owner's call.
+- **Next action:** none in flight.
 
 ### Phase boundaries deliberately held
 
 Structure exists in the baseline where behavior does not. A table being present
 is not evidence that its behavior is implemented.
 
-- The ledger has a production caller from phase 009: deal creation places holds and
-  confirmation settles. Nothing yet **credits** a balance, because deposits arrive in
-  phase 012, so a trader's balance is still zero unless a test puts money there -
-  which means the deal path is exercised but not yet fed.
+- The ledger is now fed. Deal creation places holds, confirmation settles, and a
+  confirmed deposit credits a balance, so the deal path finally has money to work with.
+  Nothing yet **debits** a balance to the outside: withdrawals are their own phase.
 - The insurance forfeiture and the manual adjustment are primitives with no
   caller and no endpoint. Do not wire either to anything without the owner
   decision the phase-008 specification requires first - forfeiture moves a
@@ -161,19 +150,20 @@ is not evidence that its behavior is implemented.
 - The legacy financial-statistics triggers, wallet and queue structures,
   batch/MultiSend, per-deal on-chain settlement and the withdrawal model are not
   present and are not scheduled before their own phases.
-- The Web-to-Crypto transport exists but carries nothing yet. The outbox has no
-  producer and the event journal has no applier: commands are enqueued by the deposit
-  and withdrawal phases, and events are applied to balances, deals and withdrawal
-  requests by the phases that own those objects. A stored event nobody applies is the
-  designed state, not a gap.
-- The custody service now has its request journal, key handling, chain client, policy,
-  signer and pull loop, but no producer and no signing trigger. Deposit addresses, the
-  scanner and sweep belong to the deposit phase; the owner approval that authorises a
-  signature belongs to the withdrawal phase. The pull loop runs and claims nothing,
-  because nothing enqueues yet - that is the designed state, not a gap. Reconciliation is
-  still the exchange rather than a scheduled job: the endpoint exists and the open-request
-  lists now travel on every exchange, but the periodic job waits for the deposit phase,
-  which is where its hot-wallet and unswept inputs come from.
+- The Web-to-Crypto transport now carries the deposit half. The outbox has one
+  producer (the deposit-address command) and the event journal has one applier, which
+  handles the address-created and deposit-confirmed events. The other three event types
+  are stored and deliberately parked with no applier - withdrawal status and cancel
+  rejection until the withdrawal phase, the swept event until `018-sweep-trx-float` - and
+  a stored event nobody applies remains the designed state for those.
+- The custody service now derives deposit addresses, watches the chain and tracks
+  deposit confirmations, and its pull loop has real work to claim. It still has **no
+  signing trigger**: the owner approval that alone authorises a signature belongs to the
+  withdrawal phase, and sweep - the other thing that would sign - belongs to
+  `018-sweep-trx-float`. Deposit-specific reconciliation now runs on a schedule on both
+  sides. What moved to `018` is the daily **cross-system** job and the receiver of the
+  hot-wallet and unswept sums, because the second of those sums does not exist until
+  that phase introduces it.
 - Two known limitations are inputs to the withdrawal phase rather than defects here, and
   both are unreachable while nothing can sign: a pre-signature refusal reaches no landing
   state at all - repeating without bound when it comes from recovery, and falling silent
@@ -257,6 +247,16 @@ Completed architecture/specification milestones:
   about to sign instead of trusting the node that assembled it. The independent review
   found both the unverified-body hole and a window in which one request could be paid
   twice; the owner chose to close both inside this phase rather than defer them.
+- Task 012 completed and remotely verified: trader deposits work end to end and become
+  ledger balances. The phase was split by owner decision so that the deposit path, which
+  signs nothing, would not share a review and a CI run with the first automated signing
+  path; the sweep half became `018-sweep-trx-float` with an explicitly written, mandatory
+  dependency position. Six owner decisions are recorded in its specification, the
+  load-bearing one being that a confirmed transfer belongs to the trader by destination
+  address regardless of sender - four substantive, the other two being the withdrawal and
+  renewal of the commit authorization. Four independent specification reviews and three
+  independent code reviews ran before it shipped, and every fix was checked by
+  counterfactual to fail against the implementation it was meant to reject.
 
 ## Known traps
 
@@ -422,11 +422,10 @@ Completed architecture/specification milestones:
   deposits serialize against each other, as do all settlements and all
   withdrawals. Do not wrap slow work - a network call, an external API, a long
   scan - around a ledger call.
-- Posting references are unique, and one of them is an identifier minted in the
-  custody service's own database. If that side ever re-issues an identifier, the
-  event is silently accepted as a duplicate and the money is never credited. The
-  phases that build the deposit path must make the reference globally unique or
-  prove re-issue is impossible.
+- Posting references are unique. The deposit phase discharged the obligation this
+  once carried: the deposit reference is the transfer's on-chain identity, never the
+  identifier the custody side minted, precisely because a custody database rebuild
+  could re-issue that one and the credit would then be swallowed as a duplicate.
 - The insurance hold is recalculated **unconditionally** after a deposit credit and
   never consults available funds, so the total held can exceed the balance and
   available simply clamps to zero. Making it respect available would change how
@@ -504,7 +503,7 @@ Completed architecture/specification milestones:
   set, since the phase that owns the withdrawal state machine will mint labels this
   phase has never seen.
 - An acknowledgement means **durably stored**, not applied. Anything that treats an
-  ack as "handled" will silently drop events once appliers exist, and an event whose
+  ack as "handled" silently drops events now that an applier exists, and an event whose
   application is permanently impossible is still acknowledged on purpose, so the queue
   does not stall behind it - it is marked terminal and logged instead. There is no
   alert transport on Web to carry that logged failure; the cutover phase owns it.
@@ -515,8 +514,8 @@ Completed architecture/specification milestones:
   answer that: the predicate is the first-claim stamp, not the state column.
 - The identifier a deposit event carries is minted in the custody database and is
   deliberately **not** required to be a UUID - the ledger phase chose an opaque
-  reference for exactly that reason. The on-chain identity travels alongside it so the
-  crediting phase can build a reference no database rebuild can re-issue. Demanding a
+  reference for exactly that reason. The on-chain identity travels alongside it, and the
+  crediting phase used it to build a reference no database rebuild can re-issue. Demanding a
   UUID there rejects genuine confirmed deposits forever, which is how that rule was
   caught in review rather than in production.
 - Mutual TLS on the private listener has **no off switch by design**, so both
@@ -561,6 +560,49 @@ Completed architecture/specification milestones:
   that keeps two potentially valid payouts for one request from existing at once, and
   the timeout that feeds it is ordinary configuration with no enforced relation to the
   lifetime the node chooses, so raising it far enough reopens the window.
+
+- Phase 012's traps are about not losing money that is already on the chain. **A
+  discovery source must declare its completeness.** The index either answers completely
+  for the requested interval or marks its answer truncated and says how far it is
+  complete, and the scan cursor advances only to that boundary minus an overlap - never
+  to the newest timestamp it happened to see. A paginated, newest-first source plus a
+  cursor that trusts it silently loses the oldest transfers in a busy window, and the
+  only thing that would ever notice is a balance check.
+- **Measure confirmation depth against the block the current receipt names**, and rewrite
+  the stored block while the deposit is still unconfirmed. Freezing the block discovered
+  first credits a deposit early whenever a short reorg re-includes the transaction at a
+  higher block, at fewer than the accepted depth - and a short reorg never trips the
+  "transaction disappeared" condition, so nothing else catches it. The payout tracker
+  already had this right; the deposit path had to be brought into line with it.
+- A deposit that was orphaned because the node could not find it is **not** terminal: a
+  re-discovered transfer returns it to the unconfirmed state, and the return must refresh
+  the block and recount the depth from scratch. Its uniqueness constraint blocks creating
+  a second row, so without the return path a real deposit could become permanently
+  uncreditable.
+- The applier does the business write, the ledger credit and the applied marker in **one**
+  transaction. Splitting them, or calling the ledger on the pool, breaks the property the
+  whole crediting path rests on. An event that can never be applied is still acknowledged,
+  marked permanently failed and re-reported on every reconciliation pass, because the
+  money is really on chain and really uncredited - one log line at the moment of failure
+  is not enough.
+- The ledger reference for a deposit is the transfer's **on-chain identity**, never the
+  identifier the custody side minted: a custody database rebuild could reissue that one,
+  and the credit would then be silently swallowed as a duplicate.
+- The deposit-address command's request id is derived deterministically from the trader.
+  A fresh identifier per call mints a second command and a second address, and breaks the
+  ordering scope the protocol uses for the resulting event.
+- Reconciliation must survive its own reporting rules. A check that reports once and goes
+  quiet, or a query that drops an object as soon as it is refused rather than while it is
+  still uncredited, produces exactly the silence the check exists to prevent. A check
+  gated on a staleness threshold also must not be written as if it reported immediately -
+  two comments claiming that were corrected in review because their own tests asserted
+  the opposite.
+- Deposit addresses have **no HTTP route** yet; that surface belongs to the frontend
+  finance phase. The path is complete but not reachable from the panel, so a stand cannot
+  demonstrate it end to end until then. This is the accepted boundary, not a gap.
+- A test that renames a table away to simulate a failure is safe only because every
+  fixture runs on its own ephemeral database that is dropped afterwards. Do not copy that
+  pattern into a suite that shares one database.
 
 ## AI development workflow
 
