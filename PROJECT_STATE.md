@@ -71,53 +71,61 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `014-frontend-finance`, phase 13 of the accepted financial-core
+- **Completed phase:** `017-deal-read-and-disputes`, phase 16 of the accepted financial-core
   redesign program.
-- **Implementation:** commits `91e1e777b9e6bcc36ca0d94b79dd7fbd3ae41e27` and
-  `cf7c7aff1784be477a3443238d9b2a94c332d06c`. The private
-  branch is clean and synchronized with its remote.
-- **Remote verification:** `v2` workflow runs `33632180832` on `91e1e77` and `33633692843`
-  on `cf7c7af`, both concluded **success** across all three jobs (guards and contract, web,
-  crypto), each first time, with no repair round.
-- **What this phase delivers: the money paths built by the preceding phases become
-  reachable by a person.** Until now deposits, deals, sweeps and withdrawals existed only as
-  API and workers; the operator panel still spoke to the legacy backend. The financial slice
-  of the panel now runs on the v2 API - balances read from the ledger, a trader can obtain a
-  deposit address, traders and merchants can request withdrawals and watch them progress
-  through the real state machine, an administrator reviews and approves them, and the
-  platform's own revenue can be withdrawn through the same gated path as everyone else's
-  money. The legacy financial pages, whose mechanisms v2 deliberately does not have, are gone.
-- **Web gained eight routes: seven pure reads and one idempotent request.** The eighth asks
-  for a trader's deposit address and, when there is none yet, queues a single command to the
-  custody side; it moves no money, and a repeat collapses onto the same command. No migration,
-  no route that moves money, no new permission. Balances go through the single ledger service rather than any new SQL, so
-  the number the panel shows and the bound the withdrawal path enforces are produced by the
-  same function and cannot drift apart. All fourteen withdrawal routes already existed and were
-  not touched.
-- **The panel's nine HTTP clients became two, plus four families of direct calls folded in.**
-  One authenticated client for the panel, and the public payment widget's own. Session expiry behaves the same way everywhere: one coordinated token
-  refresh, a retry, and a real logout when the session is genuinely dead - instead of some
-  pages silently showing errors forever. The public payment widget is deliberately excluded and
-  keeps its own unauthenticated client, so an operator's token can never travel to a merchant's
-  paying customer. That boundary is checked by a committed guard script rather than by a
-  manual search, and the guard is proven to fail on an injected violation. Nothing runs it
-  automatically yet, so it is a check to run, not a gate that cannot be passed.
-- **An administrator's balance means the platform's own revenue and nothing else.** Hot wallet
-  totals, unswept custody funds and aggregated trader or merchant money are operational metrics
-  on a separate custody-status view; they are not the platform's money and are never presented
-  as an administrator's balance. Support staff keep the per-subject balance view they already
-  had, repointed at the ledger, with no role gaining reach it did not have.
-- **The custody-status view shows only what the frozen Web-to-Crypto contract already carries.**
-  The TRX float is deliberately absent: displaying it would have meant extending that contract,
-  which is an owner decision that was not made. The low-TRX condition is already detected on the
-  custody side; only its delivery channel is missing, and that belongs to the cutover phase.
-  It does **not** follow that the cutover phase should extend the contract - if that figure is
-  ever wanted on screen, it is its own bounded decision.
-- **Current/next task:** `017-deal-read-and-disputes` is unstarted and has no specification.
-  By the accepted dependency order it runs **before** `015-cutover-dev-stand`, which is the last
-  phase before a running stand - and the panel still needs it, because the transaction and
-  dashboard pages point at routes only the legacy backend answers. By owner decision the next
-  phase is never started automatically.
+- **Implementation:** commit `65b245e4c04e0e8a90408e235677dcc6e43f3ac9`. The private branch is
+  clean and synchronized with its remote.
+- **Remote verification:** `v2` workflow run `33670777788` on `65b245e`, concluded **success**
+  across all three jobs (guards and contract, web, crypto), first time, with no repair round.
+- **What this phase delivers: the panel can finally read what the platform did.** The money
+  paths became reachable by a person in the previous phase; the surfaces that show what
+  happened - deal lists and cards, the operator dashboards, the trader-priority administration
+  and the requisite reporting figures - still spoke to the legacy backend. They now run on the
+  v2 API. Forty-five routes, no migration: seventeen deal read/list/detail, eight
+  deal-constructor reads, nine trader priorities and eleven dashboards. Thirty-nine are pure
+  reads; the six writes all belong to trader priorities and move no money.
+- **This phase was split during its own run, by owner decision.** The dispute mechanism is no
+  longer part of it and became `019-dispute-mechanism`, which runs after this phase and before
+  the dev-stand cutover. The reason is the same one that split the deal-flow phase earlier:
+  accepting a dispute is the one operation in that surface that moves money, and it deserves
+  its own review and CI rather than being buried in a large read surface. The established
+  legacy facts and the two owner decisions that bind it are recorded in the master task, so
+  that phase does not re-investigate them.
+- **A deal read returns one structural shape, but each role receives only its own projection,
+  and the narrowing happens on the server.** Unifying the response shape does not mean every
+  role receives the union of what any role may see. A field hidden from a role is omitted
+  rather than emptied, and it is never filled with the other party's data; the query that would
+  fetch it is not executed at all. A merchant does not learn the trader's device, nor that
+  requisite's turnover and earned commission; a trader does not learn the platform's margin or
+  the merchant's fee rate. Hiding a field in the browser is explicitly not treated as a
+  boundary.
+- **Requisite reporting stopped showing fictitious zeros.** Turnover and profit are derived
+  from finally successful deals of that requisite, as reporting figures that are never a ledger
+  source of truth and take no part in available balance, withdrawal limits or settlement. The
+  requisite balance is gone rather than displayed as zero: under omnibus custody money belongs
+  to a subject, not to a requisite, so a zero there would have been a number pretending to be
+  an amount. The trader profit figure also changed meaning: the legacy one added the
+  platform's own revenue to the trader's commission and reported the sum as the trader's
+  profit; it now reports the trader's earned commission alone.
+- **Only dashboards whose numbers have real meaning in v2 were carried over.** Panels built on
+  the removed wallet tables, the settlement queue, on-chain fee tables, absent commission
+  columns, hardcoded constants or randomly generated values were not recreated, and no
+  ledger-derived substitute was invented to preserve their appearance. Administrator revenue
+  now counts finally successful deals only, where the legacy figure also counted deals that
+  were still in flight, expired or errored - a smaller number, and a true one.
+- **Trader priorities gained their administrative surface, which makes the priority branch of
+  requisite selection reachable for the first time.** The deal-flow phase shipped the reader
+  without a writer, so that branch could never fire in practice. An administrator can now
+  direct turnover to a named trader; the routes are the legacy ones and no role gained reach it
+  did not have. One legacy route is deliberately absent: the distribution-strategy report, which
+  cannot be rebuilt without a separate owner decision about storing the strategy.
+- **Current/next task:** `019-dispute-mechanism` is unstarted and has no specification. It
+  runs after this phase and before `015-cutover-dev-stand`. By owner decision the next phase is
+  never started automatically.
+- **Open before the cutover phase:** the deal constructor's trader dropdown calls a legacy
+  payout route that no v2 phase owns, so after this phase it has no backend. It needs an owner
+  decision - port it, drop it with the rest of legacy, or accept the loss - taken **before**
+  `015-cutover-dev-stand` rather than discovered during the switch.
 - **Next action:** none in flight.
 
 ### Phase boundaries deliberately held
@@ -147,17 +155,19 @@ is not evidence that its behavior is implemented.
   is allowed.
 - The device-push and SMS notification pipelines now confirm deals; phase 006 had
   deliberately stopped them at the first access to the deal table.
-- The merchant public API can create a deal. Neither dispute endpoint is ported, and
-  no deal list, detail or read route exists for the trader, merchant, admin or
-  support panels - only the sandbox answers a simulated one. Those belong to
-  `017-deal-read-and-disputes`, together with the dispute subsystem beyond the
-  acceptance path that confirmation itself needs. The finance phase therefore moved the
-  transaction and dashboard pages onto the shared HTTP client without changing a single one of
-  their addresses: they still point at routes only the legacy backend answers.
+- Deal reads exist for every panel role, and the transaction and dashboard pages now call
+  them. The dispute mechanism is not ported: no dispute route, handler or dispute service was
+  introduced, and the merchant public API can create a deal but not a dispute. Two pieces do
+  already exist and still have no caller - the money-moving deal acceptance path and the pair
+  of dispute-driven requisite block and unblock operations, both shipped by the deal-flow phase
+  deliberately without callers. `019-dispute-mechanism` supplies those callers; it must not
+  rebuild the operations. A deal read does report whether a dispute is open on that deal,
+  derived from the dispute table rather than stored on the deal, so the flag cannot go stale
+  the way the legacy one did.
 - Requisite selection, limit spending, expired counters, auto-blocking and
   counterparty binding all exist from phase 009, with their two tables. The
-  administrative routes for trader priorities remain deferred, while the selection
-  semantics that read them are implemented.
+  administrative routes for trader priorities now exist as well, so the priority branch of
+  selection is reachable rather than merely implemented.
 - The legacy financial-statistics triggers, wallet and queue structures,
   batch/MultiSend, per-deal on-chain settlement and the withdrawal model are not
   present and are not scheduled before their own phases.
@@ -240,7 +250,8 @@ Completed architecture/specification milestones:
   is still open because no phase has yet needed it.
 - Task 009 completed and remotely verified: deals can be created and confirmed.
   The phase was split by owner decision so that the money core carries its own
-  review and CI; the read and dispute surface became `017-deal-read-and-disputes`.
+  review and CI; the read surface became `017-deal-read-and-disputes`, and the dispute surface was split off
+  again during that phase and is now `019-dispute-mechanism`.
   Thirteen owner decisions are recorded in its specification - ten substantive, three
   being renewals of the commit authorization - among them that a
   counterparty slot shortage may never refuse an already-accepted dispute, that
@@ -323,9 +334,27 @@ Completed architecture/specification milestones:
   list while requests were waiting, a failed request that rendered as "nothing to approve", and a
   translation key collision that printed a diagnostic sentence where the word "Status" belonged -
   none of which any build, type check, guard or test in this project can see.
+- Task 017 completed and remotely verified: the panel can read what the platform did. Ten owner
+  decisions are recorded in its specification - seven substantive, the other three being the
+  annulment and renewal of the commit authorization and the shape of the final fix round -
+  among them the split of the dispute mechanism
+  into its own phase, which dashboards may exist at all in v2, what the requisite turnover and
+  profit figures mean, and - the one raised by a reviewer after the specification was already
+  accepted - whether unifying the deal response shape may hand every role the union of what any
+  role sees. The owner ruled it may not, which turned a structural read phase back into what it
+  was meant to be instead of letting it widen who sees whose money. The code review then caught
+  a defect no test could: the phase renamed four contragent fields into a nested object and
+  migrated only one of the three cards, so an administrator's contragent button would have
+  called copy where the operator meant transfer. It survived because the client method was
+  typed as an untyped response; giving it a real type surfaced four further reads of fields
+  this phase had removed.
 
 ## Known traps
 
+- On a surface whose fields come from optional joins, `null` already means "the joined row is
+  missing". A field withheld from a role must therefore be **absent** from the response, not
+  null: nulling it makes "withheld" and "no such row" indistinguishable, and no test can then
+  prove the withholding still works.
 - A daily-window sum plus the amount being evaluated is only correct while that request
   is not already inside the sum itself. Re-checking a request that has already been
   approved counts it twice; simply dropping the added amount is wrong in the other
