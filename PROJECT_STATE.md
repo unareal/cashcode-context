@@ -71,61 +71,70 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `013-withdrawals-e2e`, phase 12 of the accepted financial-core
+- **Completed phase:** `014-frontend-finance`, phase 13 of the accepted financial-core
   redesign program.
-- **Implementation:** commit `3fb204fcb3f4fa90573e6bad13cd9f3236a6cdf5`. The private
+- **Implementation:** commits `91e1e777b9e6bcc36ca0d94b79dd7fbd3ae41e27` and
+  `cf7c7aff1784be477a3443238d9b2a94c332d06c`. The private
   branch is clean and synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33594436070` on `3fb204f`, concluded
-  **success** across all three jobs (guards and contract, web, crypto), first time,
-  with no repair round.
-- **What this phase delivers: money can now leave the platform, deliberately and only
-  with the owner's per-payout consent.** A trader, a merchant or an administrator can
-  request a withdrawal; the business side approves it; the request crosses to the
-  custody side, which checks it against its own policy and asks the owner in Telegram;
-  and only the owner's explicit SEND authorises a signature. This closes the last
-  missing money path of the v2 core: deposits credited, deals settled, sweeps
-  consolidated, and now withdrawals paid out. As with the sweep path before it, the
-  code is complete and covered by tests but has not yet been exercised against a live
-  chain or a real bot - assembly, broadcast and the owner's approval against real
-  infrastructure are first proven at the cutover phase.
-- **Web approval is not permission to sign, and never becomes one.** The business gate
-  decides whether the platform wants to pay; the owner's Telegram approval on the
-  custody side decides whether it does. The two are separate on purpose, and the custody
-  side re-derives everything it needs rather than trusting what the business side sent.
-- **A withdrawal hold is released only when it is proven no transfer can still happen.**
-  Asking to cancel never releases money by itself: the business side may finish a request
-  on its own strictly while the custody side has never taken delivery of it, and
-  otherwise it must wait for the custody side to confirm a terminal state. That single
-  rule is what makes a restart, a lost response or a duplicated delivery on either side
-  incapable of paying twice or freeing money that may still move.
-- **Owner consent does not expire into an automatic payment, and it does not survive a
-  changed policy.** A request the owner has not yet answered expires after a configurable
-  window and returns the money. Once the owner has answered, that expiry no longer
-  applies. And if the transfer has to be assembled again later - a node that could not
-  build it, a signature that never reached a block - the policy is applied again from
-  scratch before any new signature. An earlier SEND is not a standing permission to pay
-  under limits that have since changed; if the policy now refuses, nothing is signed and
-  the request goes back to waiting for funds or back to the owner, never silently
-  through.
-- **A completed withdrawal shows the transaction that paid it.** The hash comes only
-  from the custody side and only from what the network itself reported; the business side
-  never computes one, no placeholder is ever written, and a conflicting hash against an
-  already-recorded execution is treated as an evidence problem rather than overwriting
-  the record. A subject sees only their own.
-- **Treasury withdrawals move the platform's own funds and nothing else.** They draw on
-  the platform's revenue account and are bounded by it, so an administrator cannot reach
-  trader or merchant custodial balances through this path. Relocating custody to cold
-  storage is a different operation with a different accounting model and is deliberately
-  not built here.
-- **Current/next task:** `014-frontend-finance` and `017-deal-read-and-disputes` are both
-  unstarted and have no specification. By owner decision the next phase is never started
-  automatically, so which one runs next is the owner's call.
+- **Remote verification:** `v2` workflow runs `33632180832` on `91e1e77` and `33633692843`
+  on `cf7c7af`, both concluded **success** across all three jobs (guards and contract, web,
+  crypto), each first time, with no repair round.
+- **What this phase delivers: the money paths built by the preceding phases become
+  reachable by a person.** Until now deposits, deals, sweeps and withdrawals existed only as
+  API and workers; the operator panel still spoke to the legacy backend. The financial slice
+  of the panel now runs on the v2 API - balances read from the ledger, a trader can obtain a
+  deposit address, traders and merchants can request withdrawals and watch them progress
+  through the real state machine, an administrator reviews and approves them, and the
+  platform's own revenue can be withdrawn through the same gated path as everyone else's
+  money. The legacy financial pages, whose mechanisms v2 deliberately does not have, are gone.
+- **Web gained eight routes: seven pure reads and one idempotent request.** The eighth asks
+  for a trader's deposit address and, when there is none yet, queues a single command to the
+  custody side; it moves no money, and a repeat collapses onto the same command. No migration,
+  no route that moves money, no new permission. Balances go through the single ledger service rather than any new SQL, so
+  the number the panel shows and the bound the withdrawal path enforces are produced by the
+  same function and cannot drift apart. All fourteen withdrawal routes already existed and were
+  not touched.
+- **The panel's nine HTTP clients became two, plus four families of direct calls folded in.**
+  One authenticated client for the panel, and the public payment widget's own. Session expiry behaves the same way everywhere: one coordinated token
+  refresh, a retry, and a real logout when the session is genuinely dead - instead of some
+  pages silently showing errors forever. The public payment widget is deliberately excluded and
+  keeps its own unauthenticated client, so an operator's token can never travel to a merchant's
+  paying customer. That boundary is checked by a committed guard script rather than by a
+  manual search, and the guard is proven to fail on an injected violation. Nothing runs it
+  automatically yet, so it is a check to run, not a gate that cannot be passed.
+- **An administrator's balance means the platform's own revenue and nothing else.** Hot wallet
+  totals, unswept custody funds and aggregated trader or merchant money are operational metrics
+  on a separate custody-status view; they are not the platform's money and are never presented
+  as an administrator's balance. Support staff keep the per-subject balance view they already
+  had, repointed at the ledger, with no role gaining reach it did not have.
+- **The custody-status view shows only what the frozen Web-to-Crypto contract already carries.**
+  The TRX float is deliberately absent: displaying it would have meant extending that contract,
+  which is an owner decision that was not made. The low-TRX condition is already detected on the
+  custody side; only its delivery channel is missing, and that belongs to the cutover phase.
+  It does **not** follow that the cutover phase should extend the contract - if that figure is
+  ever wanted on screen, it is its own bounded decision.
+- **Current/next task:** `017-deal-read-and-disputes` is unstarted and has no specification.
+  By the accepted dependency order it runs **before** `015-cutover-dev-stand`, which is the last
+  phase before a running stand - and the panel still needs it, because the transaction and
+  dashboard pages point at routes only the legacy backend answers. By owner decision the next
+  phase is never started automatically.
 - **Next action:** none in flight.
 
 ### Phase boundaries deliberately held
 
 Structure exists in the baseline where behavior does not. A table being present
 is not evidence that its behavior is implemented.
+
+- **Nothing in the v2 core has been exercised against real infrastructure.** The deposit, sweep
+  and withdrawal paths are complete and covered by tests, but assembly, broadcast and the owner's
+  approval have never run against a live chain or a real bot, and the panel has never spoken to a
+  running v2 stand. All of that is first proven at the cutover phase.
+- **Relocating custody to cold storage is not built and is not a treasury withdrawal.** It is a
+  different operation with a different accounting model; folding it into the treasury path would
+  hide a second kind of money movement inside an existing one.
+- **A treasury withdrawal draws on the platform's revenue account and is bounded by it.** An
+  administrator cannot reach trader or merchant custodial balances through that path, and the
+  administrative balance view shows the same account for the same reason.
 
 - The ledger is now complete in both directions. Deal creation places holds,
   confirmation settles, a confirmed deposit credits a balance, and a confirmed
@@ -142,7 +151,9 @@ is not evidence that its behavior is implemented.
   no deal list, detail or read route exists for the trader, merchant, admin or
   support panels - only the sandbox answers a simulated one. Those belong to
   `017-deal-read-and-disputes`, together with the dispute subsystem beyond the
-  acceptance path that confirmation itself needs.
+  acceptance path that confirmation itself needs. The finance phase therefore moved the
+  transaction and dashboard pages onto the shared HTTP client without changing a single one of
+  their addresses: they still point at routes only the legacy backend answers.
 - Requisite selection, limit spending, expired counters, auto-blocking and
   counterparty binding all exist from phase 009, with their two tables. The
   administrative routes for trader priorities remain deferred, while the selection
@@ -295,6 +306,23 @@ Completed architecture/specification milestones:
   pressed, which became an owner decision and then a design change; and, in the fix for
   it, an accounting error that counted a request against its own daily limit twice, which
   no test in the suite could see because every fixture used amounts far below the cap.
+- Task 014 completed and remotely verified: the v2 core became operable by a person. Eleven owner
+  decisions are recorded in its specification, covering whether an
+  administrator may start a treasury withdrawal from the panel at all, what an administrator's
+  balance means once custody is omnibus, whether support keeps its view of a subject's funds,
+  whether the public payment widget shares the panel's HTTP client, how far the client
+  consolidation reaches, and whether a page whose calls have never been authenticated should start
+  working as a side effect of that consolidation. The specification reviews earned their place
+  before any code existed: four rounds caught an acceptance criterion resting on a lint command
+  that is broken in the baseline and would have blocked the commit regardless of code quality; a
+  structural guard that failed on correct code, making the phase's own gate unreachable; a single
+  line of client configuration that satisfied every guard rule while sending the operator's token
+  to the public payment page; a migration that would have replaced a merchant's own API credentials
+  with the panel session token; and a rationale that licensed dropping a merchant's request
+  signature. After implementation the code reviews found a filter that returned an empty approval
+  list while requests were waiting, a failed request that rendered as "nothing to approve", and a
+  translation key collision that printed a diagnostic sentence where the word "Status" belonged -
+  none of which any build, type check, guard or test in this project can see.
 
 ## Known traps
 
@@ -650,9 +678,10 @@ Completed architecture/specification milestones:
   gated on a staleness threshold also must not be written as if it reported immediately -
   two comments claiming that were corrected in review because their own tests asserted
   the opposite.
-- Deposit addresses have **no HTTP route** yet; that surface belongs to the frontend
-  finance phase. The path is complete but not reachable from the panel, so a stand cannot
-  demonstrate it end to end until then. This is the accepted boundary, not a gap.
+- Deposit addresses, ledger balances and the custody-status view now have HTTP routes and a
+  panel that consumes them; that boundary is closed. What remains is that nothing in the panel
+  has been exercised against a running stand, because the stand still serves the legacy backend
+  until the cutover phase.
 - A test that renames a table away to simulate a failure is safe only because every
   fixture runs on its own ephemeral database that is dropped afterwards. Do not copy that
   pattern into a suite that shares one database.
@@ -677,6 +706,50 @@ Completed architecture/specification milestones:
   forever. Where an external format matters, pin it with a real captured sample and prove
   the tests are not vacuous by deliberately breaking the mapping and watching them fail;
   encoder-and-decoder symmetry alone proves nothing about absolute correctness.
+
+- Phase 014's traps are about defects that no automated check in this project can see. A
+  translation key that is a **string in one language and an object in another** resolves, in the
+  language where it is an object, to a diagnostic sentence rendered straight into the UI - and the
+  usual "default value" argument does not save it, because that fallback applies only when the
+  resolved value is empty or missing, and an object is neither. Build, type check and structural guards are all
+  blind to it. The only way to know is to resolve every key through the real translation library
+  against the real files; do that whenever a phase touches a surface's captions.
+- A structural guard is only worth what it detects, and the gap is never where you look. A guard
+  written to keep authenticated traffic on one HTTP client missed the callable form of the client,
+  a lower-case header name, the browser's older request object, a second client constructed in an
+  allowed file, and a re-introduced call that took the session credential
+  directly instead of obtaining it from the canonical client. Worse, its first version
+  counted violations inside a shell pipeline subshell and reported success while printing them.
+  Both classes were caught only because the acceptance criterion required **demonstrating the
+  guard failing on an injected violation**, not merely writing it. Require that demonstration for
+  every guard.
+- The mirror-image hazards on an approval screen are equally dangerous and only one is obvious. A
+  filter that silently matches nothing shows "no requests" while requests wait; a filter that is
+  not applied shows every subject while the control reads as filtered. Both end with an operator
+  acting on a list they misread. Derive the "is this filter actually applied" condition and the
+  "what do we send" condition from one predicate, and say plainly on screen when a filter is
+  incomplete.
+- A failed request must never render as an empty result on a surface where "empty" means "nothing
+  to do". A query that returns no data on error, plus a default of "empty list", plus no error
+  branch, turns every network blip into a false all-clear. Where rows were already loaded, keep
+  them under an explicit staleness warning rather than blanking the screen - that is safe here only
+  because the server re-reads the request under lock and refuses a stale action.
+- Comparing a type-checker's error count between two checkouts produces false positives: some
+  messages embed absolute paths, which differ per checkout. Normalise the paths and compare as a
+  multiset, or a clean run will look like a regression.
+- An acceptance criterion pointed at a path that does not exist passes silently forever. One in
+  this phase asserted that database migrations were untouched, against a directory path that does not
+  exist; the command returned success whatever the migrations did. A criterion that cannot fail
+  is not a criterion.
+- Consolidating clients changes behavior beyond the transport. Call sites that had no session
+  handling inherit it, and any endpoint that answers "unauthorized" for a **wrong credential**
+  rather than a dead session would then log the operator out on a mistyped password. No such
+  endpoint is reachable through the shared client today; check that again before routing a
+  credential-checking call through it.
+- A public payment page is not the operator panel. Folding it into the panel's authenticated
+  client attaches an operator token to a request a paying customer's browser makes, and gives that
+  customer the panel's session-expiry redirect mid-payment. Express that boundary as a separate
+  component, not as a flag on a shared one.
 
 ## AI development workflow
 
