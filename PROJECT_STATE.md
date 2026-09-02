@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -71,55 +71,53 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `018-sweep-trx-float`, the sweep half split out of phase 11 of
-  the accepted financial-core redesign program.
-- **Implementation:** commit `c6f58564fad4955d620c5286286d8f750fdc3503`. The private
+- **Completed phase:** `013-withdrawals-e2e`, phase 12 of the accepted financial-core
+  redesign program.
+- **Implementation:** commit `3fb204fcb3f4fa90573e6bad13cd9f3236a6cdf5`. The private
   branch is clean and synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33507973724` on `c6f5856`, concluded
+- **Remote verification:** `v2` workflow run `33594436070` on `3fb204f`, concluded
   **success** across all three jobs (guards and contract, web, crypto), first time,
   with no repair round.
-- **What this phase delivers: the platform can now move its own custody funds without a
-  human in the loop.** USDT accumulating on trader deposit addresses is swept to the hot
-  wallet, and those addresses are funded with the small amount of chain resource a sweep
-  needs to pay for itself. Until this phase the hot wallet was never replenished from
-  deposits at all, so the outbound side had only whatever it already held. The path is
-  complete and covered by tests, including a real captured transaction body, but it has
-  not yet been exercised against a live chain - assembly and broadcast against a real
-  node are first proven at the cutover phase.
-- **This is the first automated signing and broadcast path in the system.** Everything
-  before it either signed nothing or required an explicit human approval per
-  transaction. That is why the phase was separated from the deposit half in the first
-  place: the risk profile differs, and the two should not share one review and one CI
-  run.
-- **The two sweep-side operation classes are not payouts and are not treated as such.**
-  They do not consume the payout safety caps that exist to bound outbound loss to third
-  parties, and the payout destination allowlist does not apply to them, because they
-  move value between two locations the platform already controls. By owner decision that
-  is an explicit rule with its own separate safety budgets, never an implicit exemption
-  - a privileged category never quietly bypasses a limit it happens not to be checked
-  against. What replaces the allowlist is stricter, not looser: one destination is
-  computed by the service itself, and the other is re-derived from custody key material
-  before use, so stored data alone can never send money outside the platform's own
-  keys.
-- **The thresholds were set from measurement, not from the estimate the project had been
-  carrying.** The owner refused to accept proposed numbers and required empirical
-  evidence first. A bounded read-only sample of real mainnet transfers showed the
-  resource cost per sweep was about a quarter of what the legacy code assumed - the
-  resource figure legacy carried matched the common case almost exactly, though it was
-  attached to the wrong one of the two cases, and the network's price for that resource
-  had fallen fourfold since. Every threshold, budget and alert level in this phase is
-  configurable and is recorded as a phase baseline to be revisited against real
-  operation, not as an immutable business constant.
-- **What the platform now records about its own costs.** The resource actually consumed
-  by each outbound transaction is stored alongside the fee, so the cutover phase can
-  compare the baseline against real operation and adjust configuration without touching
-  policy.
-- **Cross-system reconciliation now runs.** The daily job that compares the two sides'
-  open work exists and executes, and the Web side stores the custody totals it reports
-  instead of discarding them. Its second input - the amount sitting unswept - only came
-  into existence with this phase, which is why three earlier phases deferred the job to
-  it.
-- **Current/next task:** `013-withdrawals-e2e` and `017-deal-read-and-disputes` are both
+- **What this phase delivers: money can now leave the platform, deliberately and only
+  with the owner's per-payout consent.** A trader, a merchant or an administrator can
+  request a withdrawal; the business side approves it; the request crosses to the
+  custody side, which checks it against its own policy and asks the owner in Telegram;
+  and only the owner's explicit SEND authorises a signature. This closes the last
+  missing money path of the v2 core: deposits credited, deals settled, sweeps
+  consolidated, and now withdrawals paid out. As with the sweep path before it, the
+  code is complete and covered by tests but has not yet been exercised against a live
+  chain or a real bot - assembly, broadcast and the owner's approval against real
+  infrastructure are first proven at the cutover phase.
+- **Web approval is not permission to sign, and never becomes one.** The business gate
+  decides whether the platform wants to pay; the owner's Telegram approval on the
+  custody side decides whether it does. The two are separate on purpose, and the custody
+  side re-derives everything it needs rather than trusting what the business side sent.
+- **A withdrawal hold is released only when it is proven no transfer can still happen.**
+  Asking to cancel never releases money by itself: the business side may finish a request
+  on its own strictly while the custody side has never taken delivery of it, and
+  otherwise it must wait for the custody side to confirm a terminal state. That single
+  rule is what makes a restart, a lost response or a duplicated delivery on either side
+  incapable of paying twice or freeing money that may still move.
+- **Owner consent does not expire into an automatic payment, and it does not survive a
+  changed policy.** A request the owner has not yet answered expires after a configurable
+  window and returns the money. Once the owner has answered, that expiry no longer
+  applies. And if the transfer has to be assembled again later - a node that could not
+  build it, a signature that never reached a block - the policy is applied again from
+  scratch before any new signature. An earlier SEND is not a standing permission to pay
+  under limits that have since changed; if the policy now refuses, nothing is signed and
+  the request goes back to waiting for funds or back to the owner, never silently
+  through.
+- **A completed withdrawal shows the transaction that paid it.** The hash comes only
+  from the custody side and only from what the network itself reported; the business side
+  never computes one, no placeholder is ever written, and a conflicting hash against an
+  already-recorded execution is treated as an evidence problem rather than overwriting
+  the record. A subject sees only their own.
+- **Treasury withdrawals move the platform's own funds and nothing else.** They draw on
+  the platform's revenue account and are bounded by it, so an administrator cannot reach
+  trader or merchant custodial balances through this path. Relocating custody to cold
+  storage is a different operation with a different accounting model and is deliberately
+  not built here.
+- **Current/next task:** `014-frontend-finance` and `017-deal-read-and-disputes` are both
   unstarted and have no specification. By owner decision the next phase is never started
   automatically, so which one runs next is the owner's call.
 - **Next action:** none in flight.
@@ -129,9 +127,10 @@ disconnects.
 Structure exists in the baseline where behavior does not. A table being present
 is not evidence that its behavior is implemented.
 
-- The ledger is now fed. Deal creation places holds, confirmation settles, and a
-  confirmed deposit credits a balance, so the deal path finally has money to work with.
-  Nothing yet **debits** a balance to the outside: withdrawals are their own phase.
+- The ledger is now complete in both directions. Deal creation places holds,
+  confirmation settles, a confirmed deposit credits a balance, and a confirmed
+  withdrawal debits one to the outside. Every movement of money in the v2 core now has
+  an implemented path.
 - The insurance forfeiture and the manual adjustment are primitives with no
   caller and no endpoint. Do not wire either to anything without the owner
   decision the phase-008 specification requires first - forfeiture moves a
@@ -154,27 +153,28 @@ is not evidence that its behavior is implemented.
 - An inbound event applier performs whatever business write and ledger effect the event
   carries, together with the applied marker, in one transaction, so nothing can be
   applied twice or left half-done.
-- The Web-to-Crypto transport carries the deposit half and the sweep notification. The
-  outbox still has one producer (the deposit-address command), because a sweep is decided
-  by the custody side and is not commanded across the wire at all. The event journal now
-  applies the address-created, deposit-confirmed and swept events; the swept one records
-  the fact and deliberately posts nothing to the ledger, since the money was already
-  credited at confirmation. Withdrawal status and cancel rejection are still stored and
-  parked with no applier until the withdrawal phase, and a stored event nobody applies
-  remains the designed state for those.
+- The Web-to-Crypto transport now carries every command and event the wire defines. The
+  outbox has three producers: the deposit-address command, the withdrawal command and the
+  cancellation command; a sweep remains absent from it, because a sweep is decided by the
+  custody side and is not commanded across the wire at all. The event journal applies all
+  five event types, withdrawal status and cancel rejection included. The swept event
+  still records the fact and deliberately posts nothing to the ledger, since the money
+  was already credited at confirmation. No event type is stored-and-parked any more.
 - The custody service derives deposit addresses, watches the chain, tracks deposit
-  confirmations, and now signs and broadcasts on its own for the two internal custody
-  operations. The **payout** side still has no signing trigger: the explicit owner
-  approval that alone authorises a payout signature belongs to the withdrawal phase, and
-  nothing in this phase created a path to it. Both the deposit-specific and the daily
-  cross-system reconciliation now run on a schedule.
-- Two known limitations are inputs to the withdrawal phase rather than defects here, and
-  both are unreachable while the payout path has no signing trigger: a pre-signature refusal reaches no landing
-  state at all - repeating without bound when it comes from recovery, and falling silent
-  after one record when it comes from the send path - and a crash between approval and
-  signature strands the request with no automatic re-drive. Both keep the hold, so money is frozen rather than
-  lost, and both need the reachable path the withdrawal phase introduces before they
-  matter.
+  confirmations, signs and broadcasts on its own for the two internal custody operations,
+  and now signs payouts as well - but only after an explicit owner approval delivered
+  through the Telegram bot, which is the only trigger that exists for it. Both the
+  deposit-specific and the daily cross-system reconciliation run on a schedule, and the
+  reconciliation's in-flight term is now populated rather than fixed at zero.
+- The two limitations that phase carried forward are closed, and closing them was the
+  substance of an owner decision. A pre-signature refusal now always reaches a landing
+  state instead of repeating without bound or falling silent, and a crash between
+  approval and signature is re-driven - with the policy applied again before anything is
+  signed. One accepted residual remains: while the policy still passes, a node that
+  cannot assemble a transaction is retried without a repeat budget, which costs journal
+  rows and node calls but cannot pay twice, cannot pay under a changed policy, and keeps
+  the hold. Bounding those repeats would be a new rule about when money stops being held
+  and was left to a future owner decision.
 - The baseline seeded no reference data. Bank display names were supplied by
   phase 006, and the global fee tiers, the tariff grid and this phase's
   configuration keys by phase 007. Each system configuration key is still defined
@@ -266,7 +266,11 @@ Completed architecture/specification milestones:
   line was written - that empirical cost evidence had to be gathered before any threshold
   was accepted, that the sweep-side classes get their own explicit safety budgets rather
   than an exemption from the payout ones, and the exact structural restriction on where
-  each class may send. The independent reviews earned their place twice over: the
+  each class may send. Two facts from it a cutover session will want: the chain resource
+  actually consumed by each outbound transaction is recorded alongside the fee, so real
+  operation can be compared against the baseline; and every threshold there is
+  configurable and recorded as a phase baseline to revisit, never as a business constant.
+  The independent reviews earned their place twice over: the
   specification review caught, before any code existed, that an exhausted global budget
   would have suspended every address at once instead of the one at fault and that a
   transient failure during assembly could permanently and silently disable an address,
@@ -274,9 +278,41 @@ Completed architecture/specification milestones:
   batch checked the custody reserve floor against the balance read at the start of the
   pass, so a batch could individually pass and collectively breach a floor the owner had
   declared inviolable.
+- Task 013 completed and remotely verified: the withdrawal path exists end to end, and
+  with it the last money path of the v2 core. Seven owner decisions are recorded in its
+  specification, covering who may approve, what a treasury withdrawal is allowed to
+  move, how long consent waits before it expires, whether a payout may be reassembled
+  under a policy that has changed, and whether a completed withdrawal shows the
+  transaction that paid it. The independent reviews were the phase's most valuable
+  activity by a wide margin. Before any code existed, the specification review caught an
+  approval rule that would have required more approvers than the legacy behavior it was
+  meant to carry over, an owner-facing shortfall figure that was arithmetically too small
+  so that topping up by the amount shown would still have failed, and a guarantee the
+  specification asserted but could not deliver, since the state it reasoned from does not
+  imply what it claimed - and the acceptance test for it could not have failed, because
+  the test double always supplied the missing value. After implementation, the code review
+  caught a payout that could be signed under a stale authorisation long after the owner
+  pressed, which became an owner decision and then a design change; and, in the fix for
+  it, an accounting error that counted a request against its own daily limit twice, which
+  no test in the suite could see because every fixture used amounts far below the cap.
 
 ## Known traps
 
+- A daily-window sum plus the amount being evaluated is only correct while that request
+  is not already inside the sum itself. Re-checking a request that has already been
+  approved counts it twice; simply dropping the added amount is wrong in the other
+  direction, because an approval that has aged out of the window would then be counted
+  zero times. Exclude the request being evaluated, and keep the addition.
+- A consent lifetime must key on "the owner has not decided anything yet", never on a
+  list of states. A request can return to the owner's queue after a decision, and a
+  state-list rule silently starts expiring it a second time.
+- A request approved for send that carries no stored transaction id provably has no
+  signature behind it, which is the only reason it can be safely handed back to the
+  owner. That proof rests entirely on the transaction id being written by the signing
+  transition and by nothing else - preserve that property or the safe exit disappears.
+- The custody daemon refuses to start without its owner-approval channel configured,
+  the same class as the mTLS material. Supplying it is a cutover precondition, not a
+  runtime nicety.
 - Do not treat legacy balance mirrors or `transaction_queue` as an internal
   accounting system, and do not restore per-deal blockchain settlement.
 - Do not import from the frozen backend into v2 or expand a scaffolding phase
