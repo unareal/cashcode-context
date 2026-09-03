@@ -72,12 +72,16 @@ disconnects.
 
 - **Branch:** `architecture/financial-core-redesign`
 - **Completed phase:** `019-dispute-mechanism`, phase 18 of the accepted financial-core
-  redesign program, followed by the bounded pre-cutover cleanup `020-constructor-trader-list`.
-- **Implementation:** commit `a126ebb` on top of `1c1377705228506972f34a43deda8db3e3139e88`.
-  The private branch is clean and synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33775802297` on `a126ebb`, concluded **success**
-  across all three jobs (guards and contract, web, crypto), first time, with no repair round.
-  The preceding phase was verified the same way by run `33755833210`.
+  redesign program, followed by three bounded pre-cutover tasks:
+  `020-constructor-trader-list`, `021-constructor-trader-filter` and
+  `022-insurance-surface`.
+- **Implementation:** commits `a126ebb`, `01e6695` and `3101116` on top of
+  `1c1377705228506972f34a43deda8db3e3139e88`. The private branch is clean and
+  synchronized with its remote.
+- **Remote verification:** `v2` workflow run `33795429640` on `3101116`, and run
+  `33775802297` on `a126ebb`, both **success** across all three jobs (guards and contract,
+  web, crypto), first time, with no repair round. The middle commit was pushed together with
+  the head, so the head run is what covers it.
 - **What this phase delivers: a disputed deal can now be judged, and judging it moves money.**
   The read surface of the previous phase could show that a dispute existed but nothing could
   open, answer or settle one. The whole mechanism is now on the v2 API: creation from the
@@ -131,30 +135,49 @@ disconnects.
 - **Current/next task:** `015-cutover-dev-stand` is the next phase in the dependency order,
   with `018-sweep-trx-float` already complete. By owner decision the next phase is never
   started automatically.
-- **That cutover gap is now closed, and closing it revealed a dead control.** The deal
-  constructor's trader dropdown used to call the payout queue's filter route, which no v2
-  phase owns; it now reads the constructor's own list of traders, the symmetric twin of the
-  merchant list it already had. No payout machinery was ported for it, no role gained data or
-  a capability, and no money path was touched. What the investigation turned up is that the
-  filter the dropdown feeds has never filtered anything: the selection is not sent to the
-  server and does not narrow the result list, and in the old code the parameter the frontend
-  did send was silently dropped, because the request struct had no field for it. Making the
-  filter real, or removing the control, changes visible behaviour and is an open owner
-  decision; the list itself works either way.
-- **A sweep of the web client found no unrecorded call that the cutover will break.** Every
-  frontend call that loses its backend at the switch is already named in a phase
-  specification: the deferred dashboards and their export, the merchant dashboard statistics,
-  the log and message surfaces, the dropped requisite-monitoring routes, insurance, and the
-  batch processing action. A second group of calls is already dead against the current backend
-  and so is unaffected by the switch - system configuration, notifications, currency
-  conversion, and a few device and SMS-device operations that were never served for the role
-  the client derives. One surface still needs an owner decision before the switch: the
-  insurance administration pages are money-adjacent, are served today, and the specifications
-  name them precisely as belonging to no v2 phase.
-- **The cutover is wider than the web client, and one known break lives outside it.** Android
-  self-update fetches its package from the platform and stops working the moment the stand is
-  switched; that obligation is already assigned to the cutover phase itself. Read the sweep as
-  covering the web client only.
+- **The constructor's trader filter is now real, and its option list is derived rather than
+  assumed.** The dropdown used to call the payout queue's filter route, which no v2 phase
+  owns; it now reads the constructor's own list. The filter itself had never filtered
+  anything - the selection went nowhere, and in the old code the parameter the client did send
+  was silently dropped because the request had no field for it. By owner decision it now
+  narrows the already-received result on the client; the server-side requisite search is
+  untouched. The option list had to widen to satisfy the rule the owner set: anyone who can
+  appear in the result must be selectable. It therefore offers the owner of an active
+  requisite on an active device, consulting neither the owner's status nor its type, because
+  either predicate would leave rows that no filter value can reach. One defect that widening
+  would otherwise have introduced is fixed with it: a requisite hidden by the filter no longer
+  stays selected, which would have built the deal on a requisite nobody could see.
+- **Insurance administration is ported, and deliberately only as far as reading.** The pages
+  were money-adjacent, served by the frozen legacy backend and owned by no v2 phase. What
+  the investigation established is that the legacy edit is not a settings change: raising a
+  user's requirement signs a real transfer out of that user's own wallet into a platform
+  wallet, and lowering it transfers back. The accepted architecture inverts exactly that - the
+  insurance stays the trader's money and is expressed as a hold - so the edit action was not
+  ported and its control was removed rather than left pointing at a route that will not exist.
+  The reads now show the canonical quantity instead of a translation: a requirement is covered
+  when the trader's balance reaches it. A literal port was impossible, because the old "paid"
+  column counted money already taken from the user and no such money exists any more.
+  **What this leaves open for the owner:** whether an administrator may change a requirement
+  at all after the switch, and if so whether the trader's available balance moves the moment
+  they do. The same answer settles whether merchants keep a requirement, since the v2 hold is
+  trader-only and a merchant's requirement currently influences nothing.
+- **A correction to what this file said earlier: grepping the legacy route file alone
+  under-reports the legacy surface.** Roughly thirty admin routes are registered indirectly,
+  through handler registrars rather than at the call site, and two sweeps missed them. System
+  configuration and the admin notification channel are NOT already dead, as stated here
+  before - they are served today and do disappear at the switch.
+- **What the corrected sweep leaves open before the cutover, all of it owner-level.** Three of
+  the four live admin dashboard tabs lose their cards, and the support-admin dashboard loses
+  part of its own, taking platform revenue, wallet state and top-performer views with them.
+  The merchant dashboard loses its turnover and withdrawal cards, which is already a decided
+  exclusion. Batch settlement has no v2 equivalent. The admin notification channel disappears,
+  and so does the operator-facing editor of system configuration - the configuration mechanism
+  and its values were ported, only the surface for editing them was not. Whether each is
+  rebuilt, narrowed or dropped is a decision about operator capability and money, not an
+  engineering one.
+- **The cutover is wider than the web client.** Android self-update fetches its package from
+  the platform and stops working the moment the stand is switched; that obligation is already
+  assigned to the cutover phase itself.
 - **Next action:** none in flight.
 
 ### Phase boundaries deliberately held
