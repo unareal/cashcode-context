@@ -72,11 +72,12 @@ disconnects.
 
 - **Branch:** `architecture/financial-core-redesign`
 - **Completed phase:** `019-dispute-mechanism`, phase 18 of the accepted financial-core
-  redesign program.
-- **Implementation:** commit `1c1377705228506972f34a43deda8db3e3139e88`. The private branch is
-  clean and synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33755833210` on `1c13777`, concluded **success**
+  redesign program, followed by the bounded pre-cutover cleanup `020-constructor-trader-list`.
+- **Implementation:** commit `a126ebb` on top of `1c1377705228506972f34a43deda8db3e3139e88`.
+  The private branch is clean and synchronized with its remote.
+- **Remote verification:** `v2` workflow run `33775802297` on `a126ebb`, concluded **success**
   across all three jobs (guards and contract, web, crypto), first time, with no repair round.
+  The preceding phase was verified the same way by run `33755833210`.
 - **What this phase delivers: a disputed deal can now be judged, and judging it moves money.**
   The read surface of the previous phase could show that a dispute existed but nothing could
   open, answer or settle one. The whole mechanism is now on the v2 API: creation from the
@@ -130,10 +131,30 @@ disconnects.
 - **Current/next task:** `015-cutover-dev-stand` is the next phase in the dependency order,
   with `018-sweep-trx-float` already complete. By owner decision the next phase is never
   started automatically.
-- **Open before the cutover phase:** the deal constructor's trader dropdown calls a legacy
-  payout route that no v2 phase owns, so it has no backend. It needs an owner decision - port
-  it, drop it with the rest of legacy, or accept the loss - taken **before**
-  `015-cutover-dev-stand` rather than discovered during the switch.
+- **That cutover gap is now closed, and closing it revealed a dead control.** The deal
+  constructor's trader dropdown used to call the payout queue's filter route, which no v2
+  phase owns; it now reads the constructor's own list of traders, the symmetric twin of the
+  merchant list it already had. No payout machinery was ported for it, no role gained data or
+  a capability, and no money path was touched. What the investigation turned up is that the
+  filter the dropdown feeds has never filtered anything: the selection is not sent to the
+  server and does not narrow the result list, and in the old code the parameter the frontend
+  did send was silently dropped, because the request struct had no field for it. Making the
+  filter real, or removing the control, changes visible behaviour and is an open owner
+  decision; the list itself works either way.
+- **A sweep of the web client found no unrecorded call that the cutover will break.** Every
+  frontend call that loses its backend at the switch is already named in a phase
+  specification: the deferred dashboards and their export, the merchant dashboard statistics,
+  the log and message surfaces, the dropped requisite-monitoring routes, insurance, and the
+  batch processing action. A second group of calls is already dead against the current backend
+  and so is unaffected by the switch - system configuration, notifications, currency
+  conversion, and a few device and SMS-device operations that were never served for the role
+  the client derives. One surface still needs an owner decision before the switch: the
+  insurance administration pages are money-adjacent, are served today, and the specifications
+  name them precisely as belonging to no v2 phase.
+- **The cutover is wider than the web client, and one known break lives outside it.** Android
+  self-update fetches its package from the platform and stops working the moment the stand is
+  switched; that obligation is already assigned to the cutover phase itself. Read the sweep as
+  covering the web client only.
 - **Next action:** none in flight.
 
 ### Phase boundaries deliberately held
