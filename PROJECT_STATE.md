@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -71,60 +71,68 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `017-deal-read-and-disputes`, phase 16 of the accepted financial-core
+- **Completed phase:** `019-dispute-mechanism`, phase 18 of the accepted financial-core
   redesign program.
-- **Implementation:** commit `65b245e4c04e0e8a90408e235677dcc6e43f3ac9`. The private branch is
+- **Implementation:** commit `1c1377705228506972f34a43deda8db3e3139e88`. The private branch is
   clean and synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33670777788` on `65b245e`, concluded **success**
+- **Remote verification:** `v2` workflow run `33755833210` on `1c13777`, concluded **success**
   across all three jobs (guards and contract, web, crypto), first time, with no repair round.
-- **What this phase delivers: the panel can finally read what the platform did.** The money
-  paths became reachable by a person in the previous phase; the surfaces that show what
-  happened - deal lists and cards, the operator dashboards, the trader-priority administration
-  and the requisite reporting figures - still spoke to the legacy backend. They now run on the
-  v2 API. Forty-five routes, no migration: seventeen deal read/list/detail, eight
-  deal-constructor reads, nine trader priorities and eleven dashboards. Thirty-nine are pure
-  reads; the six writes all belong to trader priorities and move no money.
-- **This phase was split during its own run, by owner decision.** The dispute mechanism is no
-  longer part of it and became `019-dispute-mechanism`, which runs after this phase and before
-  the dev-stand cutover. The reason is the same one that split the deal-flow phase earlier:
-  accepting a dispute is the one operation in that surface that moves money, and it deserves
-  its own review and CI rather than being buried in a large read surface. The established
-  legacy facts and the two owner decisions that bind it are recorded in the master task, so
-  that phase does not re-investigate them.
-- **A deal read returns one structural shape, but each role receives only its own projection,
-  and the narrowing happens on the server.** Unifying the response shape does not mean every
-  role receives the union of what any role may see. A field hidden from a role is omitted
-  rather than emptied, and it is never filled with the other party's data; the query that would
-  fetch it is not executed at all. A merchant does not learn the trader's device, nor that
-  requisite's turnover and earned commission; a trader does not learn the platform's margin or
-  the merchant's fee rate. Hiding a field in the browser is explicitly not treated as a
-  boundary.
-- **Requisite reporting stopped showing fictitious zeros.** Turnover and profit are derived
-  from finally successful deals of that requisite, as reporting figures that are never a ledger
-  source of truth and take no part in available balance, withdrawal limits or settlement. The
-  requisite balance is gone rather than displayed as zero: under omnibus custody money belongs
-  to a subject, not to a requisite, so a zero there would have been a number pretending to be
-  an amount. The trader profit figure also changed meaning: the legacy one added the
-  platform's own revenue to the trader's commission and reported the sum as the trader's
-  profit; it now reports the trader's earned commission alone.
-- **Only dashboards whose numbers have real meaning in v2 were carried over.** Panels built on
-  the removed wallet tables, the settlement queue, on-chain fee tables, absent commission
-  columns, hardcoded constants or randomly generated values were not recreated, and no
-  ledger-derived substitute was invented to preserve their appearance. Administrator revenue
-  now counts finally successful deals only, where the legacy figure also counted deals that
-  were still in flight, expired or errored - a smaller number, and a true one.
-- **Trader priorities gained their administrative surface, which makes the priority branch of
-  requisite selection reachable for the first time.** The deal-flow phase shipped the reader
-  without a writer, so that branch could never fire in practice. An administrator can now
-  direct turnover to a named trader; the routes are the legacy ones and no role gained reach it
-  did not have. One legacy route is deliberately absent: the distribution-strategy report, which
-  cannot be rebuilt without a separate owner decision about storing the strategy.
-- **Current/next task:** `019-dispute-mechanism` is unstarted and has no specification. It
-  runs after this phase and before `015-cutover-dev-stand`. By owner decision the next phase is
-  never started automatically.
+- **What this phase delivers: a disputed deal can now be judged, and judging it moves money.**
+  The read surface of the previous phase could show that a dispute existed but nothing could
+  open, answer or settle one. The whole mechanism is now on the v2 API: creation from the
+  panel, from the merchant public API and from the sandbox; the read lifecycle for every role;
+  accept and reject; evidence documents; the dispute-specific merchant notification; and the
+  operator and administrator actions. Fifty-three routes and one migration.
+- **Accepting a dispute is the only operation here that moves money, and it reuses the deal
+  confirmation path rather than a second one.** The deal-flow phase shipped that path
+  deliberately without a caller; this phase supplies it. Settlement, holds, limits and
+  counterparty slots are not rebuilt, so a dispute settles through exactly the same accounting
+  as an ordinary confirmation. Its two refusals are the requisite limit and insufficient
+  available funds; a counterparty slot shortage never refuses an accepted dispute. The dispute
+  transition, the settlement and the requisite auto-block commit in one transaction, so no
+  state exists in which a dispute is accepted while its deal is unsettled.
+- **Evidence files live in the database, not on a service's filesystem.** That was an owner
+  decision, and it removes a class of failure rather than a class of work: backup and restore
+  cover the evidence automatically, a redeployed or moved service loses nothing, and no
+  document row can outlive the bytes it points at. Uploads are streamed with an explicit
+  per-part bound and a request-size cap, and the ways a web framework silently spills a large
+  upload to a temporary file are forbidden by name - the prohibition had to be corrected once,
+  because its obvious form missed the one function that actually does the spilling, and what
+  enforces it is described under Known traps.
+- **Deleting evidence is soft, always.** Bytes, metadata, hash, uploader identity and history
+  survive; no route removes a row; a deleted document is simply not found on
+  every read path including the administrator's. The uploader may remove its own upload and an
+  administrator may remove any, but nobody destroys anything - physical destruction under a
+  retention or legal policy would be a separate owner decision. The per-dispute document
+  ceiling counts live rows, so a deletion frees a slot.
+- **Support staff can open a dispute and attach evidence, and can make no money decision.**
+  Accept, reject and any other settling action stay with the administrator and the dispute's
+  trader. The guard that used to assert this role has no write route at all was narrowed rather
+  than deleted: it now lists the three routes it may have and fails on a fourth.
+- **A trader reaching for another party's identifier is told the object does not exist.** Reads
+  of disputes by requisite, device or deal are scoped to what the caller owns, and an
+  unreachable object answers exactly as a nonexistent one does - the same body, on every
+  method including writes - so the answer cannot be used to discover that someone else's
+  dispute exists. Closing that hole was an owner decision, taken deliberately even though a
+  comparable legacy gap elsewhere was carried forward verbatim: an earlier decision to carry a
+  defect does not oblige new code to reproduce it.
+- **The sandbox cannot touch production.** Test credentials reach sandbox data only, with no
+  fallback to a production lookup, so they can neither create a real dispute nor trigger a real
+  merchant notification or auto-block. Today the sandbox holds no deal eligible for a dispute,
+  so the route answers "deal not found" - that is the current state of the sandbox, not the
+  endpoint's permanent meaning.
+- **Two deliberate departures from the old merchant wire are recorded rather than hidden.** A
+  deal in the error state now answers a client-side rejection instead of the server error the
+  old code produced through a defect in how it matched its own message; and the error envelope
+  keeps the three canonical keys instead of a fourth that carried internal validator text. Both
+  were owner decisions. Everything else on that wire, including the dispute notification
+  payload, is byte-identical to the old one.
+- **Current/next task:** `015-cutover-dev-stand` is the next phase in the dependency order,
+  with `018-sweep-trx-float` already complete. By owner decision the next phase is never
+  started automatically.
 - **Open before the cutover phase:** the deal constructor's trader dropdown calls a legacy
-  payout route that no v2 phase owns, so after this phase it has no backend. It needs an owner
-  decision - port it, drop it with the rest of legacy, or accept the loss - taken **before**
+  payout route that no v2 phase owns, so it has no backend. It needs an owner decision - port
+  it, drop it with the rest of legacy, or accept the loss - taken **before**
   `015-cutover-dev-stand` rather than discovered during the switch.
 - **Next action:** none in flight.
 
@@ -155,15 +163,14 @@ is not evidence that its behavior is implemented.
   is allowed.
 - The device-push and SMS notification pipelines now confirm deals; phase 006 had
   deliberately stopped them at the first access to the deal table.
-- Deal reads exist for every panel role, and the transaction and dashboard pages now call
-  them. The dispute mechanism is not ported: no dispute route, handler or dispute service was
-  introduced, and the merchant public API can create a deal but not a dispute. Two pieces do
-  already exist and still have no caller - the money-moving deal acceptance path and the pair
-  of dispute-driven requisite block and unblock operations, both shipped by the deal-flow phase
-  deliberately without callers. `019-dispute-mechanism` supplies those callers; it must not
-  rebuild the operations. A deal read does report whether a dispute is open on that deal,
-  derived from the dispute table rather than stored on the deal, so the flag cannot go stale
-  the way the legacy one did.
+- Deal reads exist for every panel role, and the transaction and dashboard pages call them.
+  The dispute mechanism is now ported too, and the two pieces the deal-flow phase shipped
+  without callers - the money-moving deal acceptance path and the pair of dispute-driven
+  requisite block and unblock operations - have them at last, without being rebuilt. A deal
+  read reports whether a dispute is open on that deal, derived from the dispute table rather
+  than stored on the deal, so the flag cannot go stale the way the legacy one did. Every panel
+  route that touches money now exists; what has never run is any of it against real
+  infrastructure.
 - Requisite selection, limit spending, expired counters, auto-blocking and
   counterparty binding all exist from phase 009, with their two tables. The
   administrative routes for trader priorities now exist as well, so the priority branch of
@@ -349,8 +356,52 @@ Completed architecture/specification milestones:
   typed as an untyped response; giving it a real type surfaced four further reads of fields
   this phase had removed.
 
+- Task 019 completed and remotely verified: the dispute mechanism exists end to end, and
+  accepting a dispute settles it through the same path an ordinary confirmation uses. Nine
+  owner decisions are recorded in its specification - eight substantive, the ninth being the
+  commit authorization - the load-bearing one being that evidence files live in
+  the database rather than on a service's filesystem. The independent reviews earned their
+  place repeatedly. Before any code existed they caught that the prohibition meant to keep
+  uploads out of the filesystem did not name the one standard-library function that actually
+  spills them, that reading a large upload inside an open transaction had no time bound and
+  could hold a database connection indefinitely, and that the order of parts in a multipart
+  upload had become significant while remaining unspecified. After implementation they caught
+  a merchant-visible error body that differed between the production and sandbox routes, and -
+  on the last pass before the commit, after three earlier rounds had missed it - a navigation
+  target that compiled and type-checked but sent the user to the home page instead of the deal
+  card. That last one is the standing lesson: the criteria this project verifies by code review
+  alone are exactly where a defect survives longest, and a fix should make the mistake
+  unexpressible rather than merely absent.
+
 ## Known traps
 
+- **The order of parts in a multipart dispute upload is load-bearing.** `deal_id` and `reason`
+  must be sent before the first file part; a non-file part after it is refused with a 400. That
+  is a deliberate narrowing, forced by streaming the parts straight into the database instead of
+  buffering them, and the single client appends the fields in that order today. Reorder those
+  lines and the surface breaks with a 400 that no build, type check, guard or test will see.
+- **A deal may have at most one active dispute, and this is now a database constraint, not
+  only a check in the creation path.** It already forced a test fixture from an earlier phase to
+  spread its disputes across several deals; any future fixture that stacks two active disputes
+  on one deal will fail for a reason the code does not explain. The rule the owner set: never
+  drop a database invariant to preserve a fixture representing a state the invariant makes
+  impossible.
+- **The body of a multipart upload is read inside an open database transaction**, bounded only
+  by a server-side deadline that the implementation makes injectable for tests. Remove or
+  lengthen that deadline and a slowly-sent request holds a pooled connection for as long as it
+  likes; the pool is small, so a handful of them stall every money path in the service.
+- **The scan that keeps uploads off the filesystem runs at review time, not in CI.** The
+  structural guards this project runs automatically do not include it, and the automated
+  temp-file test needs a database and therefore skips without one. Several other criteria of
+  the dispute phase - the single API client, the untouched earlier tests, the client-side
+  part order - are likewise verified by a reviewer running a pattern, not by a pipeline. Treat them as
+  standing obligations of whoever reviews next, not as things already guaranteed.
+- **Evidence is never destroyed by an ordinary delete, and the sandbox's current answer is not
+  its contract.** Deleting a dispute document hides it everywhere, including from the
+  administrator judging the dispute, while the bytes and the history stay; physical destruction
+  would be a separate owner decision. The sandbox dispute route today answers "deal not found"
+  only because the sandbox holds no deal eligible for a dispute - that is the state of the
+  sandbox, not the meaning of the endpoint.
 - On a surface whose fields come from optional joins, `null` already means "the joined row is
   missing". A field withheld from a role must therefore be **absent** from the response, not
   null: nulling it makes "withheld" and "no such row" indistinguishable, and no test can then
