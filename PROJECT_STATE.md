@@ -72,16 +72,16 @@ disconnects.
 
 - **Branch:** `architecture/financial-core-redesign`
 - **Completed phase:** `019-dispute-mechanism`, phase 18 of the accepted financial-core
-  redesign program, followed by three bounded pre-cutover tasks:
-  `020-constructor-trader-list`, `021-constructor-trader-filter` and
-  `022-insurance-surface`.
-- **Implementation:** commits `a126ebb`, `01e6695` and `3101116` on top of
+  redesign program, followed by a bounded pre-cutover program: seven implementing tasks and
+  one decision record, `020` through `027`. It settled every financial surface the sweeps
+  raised - restoring, replacing or deliberately dropping each. It is not a claim that nothing
+  breaks at the switch; what still does is listed below.
+- **Implementation:** head `325aa67`, on top of
   `1c1377705228506972f34a43deda8db3e3139e88`. The private branch is clean and
   synchronized with its remote.
-- **Remote verification:** `v2` workflow run `33795429640` on `3101116`, and run
-  `33775802297` on `a126ebb`, both **success** across all three jobs (guards and contract,
-  web, crypto), first time, with no repair round. The middle commit was pushed together with
-  the head, so the head run is what covers it.
+- **Remote verification:** `v2` workflow runs `33775802297`, `33795429640` and `33867747472`,
+  each **success** across all three jobs (guards and contract, web, crypto), first time, with
+  no repair round. Commits pushed together are covered by the run on the head of that push.
 - **What this phase delivers: a disputed deal can now be judged, and judging it moves money.**
   The read surface of the previous phase could show that a dispute existed but nothing could
   open, answer or settle one. The whole mechanism is now on the v2 API: creation from the
@@ -133,8 +133,19 @@ disconnects.
   were owner decisions. Everything else on that wire, including the dispute notification
   payload, is byte-identical to the old one.
 - **Current/next task:** `015-cutover-dev-stand` is the next phase in the dependency order,
-  with `018-sweep-trx-float` already complete. By owner decision the next phase is never
-  started automatically.
+  with `018-sweep-trx-float` already complete and the pre-cutover program finished. By owner
+  decision the next phase is never started automatically.
+- **What still breaks at the switch, and is not a gate question.** The gate covered the
+  financial and money-adjacent surfaces and answered all of them. Three live surfaces outside
+  that scope still lose their backend and belong to no phase: the administrative log viewer
+  and the message pages, both served today and absent from v2; and the merchant dashboard
+  statistics, whose exclusion was already an owner decision because their withdrawal figures
+  came from the removed withdrawal model. Android self-update also stops working the moment
+  the stand is switched. Of these, the log viewer and the message pages have never been
+  assigned to anyone and want a decision of the same kind the gate gave the financial
+  surfaces; the merchant cards are already assigned to the legacy-removal phase, not to the
+  cutover; and Android self-update is the cutover phase's own work, along with the runbook and
+  the transport for infrastructure alerts.
 - **The constructor's trader filter is now real, and its option list is derived rather than
   assumed.** The dropdown used to call the payout queue's filter route, which no v2 phase
   owns; it now reads the constructor's own list. The filter itself had never filtered
@@ -147,37 +158,50 @@ disconnects.
   either predicate would leave rows that no filter value can reach. One defect that widening
   would otherwise have introduced is fixed with it: a requisite hidden by the filter no longer
   stays selected, which would have built the deal on a requisite nobody could see.
-- **Insurance administration is ported, and deliberately only as far as reading.** The pages
-  were money-adjacent, served by the frozen legacy backend and owned by no v2 phase. What
-  the investigation established is that the legacy edit is not a settings change: raising a
-  user's requirement signs a real transfer out of that user's own wallet into a platform
-  wallet, and lowering it transfers back. The accepted architecture inverts exactly that - the
-  insurance stays the trader's money and is expressed as a hold - so the edit action was not
-  ported and its control was removed rather than left pointing at a route that will not exist.
-  The reads now show the canonical quantity instead of a translation: a requirement is covered
-  when the trader's balance reaches it. A literal port was impossible, because the old "paid"
-  column counted money already taken from the user and no such money exists any more.
-  **What this leaves open for the owner:** whether an administrator may change a requirement
-  at all after the switch, and if so whether the trader's available balance moves the moment
-  they do. The same answer settles whether merchants keep a requirement, since the v2 hold is
-  trader-only and a merchant's requirement currently influences nothing.
-- **A correction to what this file said earlier: grepping the legacy route file alone
-  under-reports the legacy surface.** Roughly thirty admin routes are registered indirectly,
-  through handler registrars rather than at the call site, and two sweeps missed them. System
-  configuration and the admin notification channel are NOT already dead, as stated here
-  before - they are served today and do disappear at the switch.
-- **What the corrected sweep leaves open before the cutover, all of it owner-level.** Three of
-  the four live admin dashboard tabs lose their cards, and the support-admin dashboard loses
-  part of its own, taking platform revenue, wallet state and top-performer views with them.
-  The merchant dashboard loses its turnover and withdrawal cards, which is already a decided
-  exclusion. Batch settlement has no v2 equivalent. The admin notification channel disappears,
-  and so does the operator-facing editor of system configuration - the configuration mechanism
-  and its values were ported, only the surface for editing them was not. Whether each is
-  rebuilt, narrowed or dropped is a decision about operator capability and money, not an
-  engineering one.
-- **The cutover is wider than the web client.** Android self-update fetches its package from
-  the platform and stops working the moment the stand is switched; that obligation is already
-  assigned to the cutover phase itself.
+- **Insurance administration is ported, reads first and then the edit.** The reads show the
+  canonical quantity rather than a translation of the old one: a requirement is covered when
+  the trader's balance reaches it. A literal port was impossible, because the old "paid"
+  column counted money already taken from the user and no such money exists in this
+  architecture. The edit was held back until the owner decided what it should mean, and now
+  means one thing only - see below.
+- **A method note worth keeping: grepping the legacy route file alone under-reports the legacy
+  surface.** Roughly thirty admin routes are registered indirectly, through handler registrars
+  rather than at the call site, and two sweeps missed them before this was noticed. Anything
+  that enumerates what the switch breaks has to follow those registrars.
+- **The financial surfaces the sweeps raised were decided at an owner gate, and the decisions
+  are now carried out.** The gate is recorded as a durable decision record rather than left in
+  conversation, and each decision names the task that executes it. What went back is only what has one meaning in v2; what
+  rested on removed mechanisms or on constants invented in the code did not.
+- **The dashboards keep the revenue that is real and lose the arithmetic that was not.**
+  Platform revenue is restored as today's figure and a daily series, both the same quantity
+  the charts panel already reported, pinned to it by a test so the two cannot drift. Pending
+  settlements, TRX spend, net profit and margin did not come back: each rested on a removed
+  table or on a hardcoded cost factor. The custody block is assembled from reads that already
+  existed. The top-trader and top-merchant cards were removed without functional loss, because
+  both queries summed a column the deal table does not have and the error was being swallowed
+  - they had been empty all along. One rule now runs through these panels: a money figure the
+  panel does not have is never rendered as zero, so a failed read says so instead of reporting
+  that the platform holds nothing.
+- **The batch-settlement button is gone rather than left dead.** It moved money on chain,
+  which v2 does not do for a deal at all: a deal settles as ledger postings and the web side
+  cannot broadcast, so the control would have answered "processing" and done nothing.
+- **Configuration editing came back deliberately narrow.** The replacement derives its key set
+  from the typed registry, refuses a key it does not declare and a value that does not fit its
+  declared type, and reaches only settings the web side owns; everything belonging to the
+  custody side or to deployment stays where the architecture puts it, out of reach of the
+  business API. A rejected request changes nothing at all, including the valid keys that
+  travelled with it.
+- **The notification bell has a reader again.** The web side was already writing notifications
+  that nothing could display, so the rows were accumulating unseen. Read state is per
+  administrator, and the count is the whole unread set rather than one page of it.
+- **An administrator can change a trader's insurance requirement, and nothing moves.** In the
+  old system that edit signed a real transfer between the trader's wallet and a platform
+  wallet; the accepted architecture inverts that, so the edit now changes only the size of the
+  hold. Raising it takes nothing and lowering it returns nothing - what changes is how much of
+  the trader's own balance is reserved, and therefore how much they can withdraw, immediately.
+  Merchants are refused outright, because no merchant insurance hold exists.
+- **What the owner deliberately did not restore:** rankings of traders and merchants, which
+  would have been a new analytical feature rather than a preserved one.
 - **Next action:** none in flight.
 
 ### Phase boundaries deliberately held
