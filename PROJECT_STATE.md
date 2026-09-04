@@ -72,16 +72,19 @@ disconnects.
 
 - **Branch:** `architecture/financial-core-redesign`
 - **Completed phase:** `019-dispute-mechanism`, phase 18 of the accepted financial-core
-  redesign program, followed by a bounded pre-cutover program: seven implementing tasks and
-  one decision record, `020` through `027`. It settled every financial surface the sweeps
-  raised - restoring, replacing or deliberately dropping each. It is not a claim that nothing
-  breaks at the switch; what still does is listed below.
-- **Implementation:** head `325aa67`, on top of
+  redesign program, followed by a bounded pre-cutover program of ten implementing tasks and
+  two owner decision records, `020` through `031`, run across two gates. **It is finished.**
+  A systematic sweep of every call the web client and the Android client make now finds no
+  live surface left without a v2 backend, apart from two the owner excluded on purpose and
+  which are named below. That is a point-in-time finding: nothing in the build keeps it true,
+  so the next frontend change can falsify it silently.
+- **Implementation:** head `c14ff3c`, on top of
   `1c1377705228506972f34a43deda8db3e3139e88`. The private branch is clean and
   synchronized with its remote.
-- **Remote verification:** `v2` workflow runs `33775802297`, `33795429640` and `33867747472`,
-  each **success** across all three jobs (guards and contract, web, crypto), first time, with
-  no repair round. Commits pushed together are covered by the run on the head of that push.
+- **Remote verification:** `v2` workflow runs `33775802297`, `33795429640`, `33867747472` and
+  `33905870363`, each **success** across all three jobs (guards and contract, web, crypto),
+  first time, with no repair round. Commits pushed together are covered by the run on the head
+  of that push.
 - **What this phase delivers: a disputed deal can now be judged, and judging it moves money.**
   The read surface of the previous phase could show that a dispute existed but nothing could
   open, answer or settle one. The whole mechanism is now on the v2 API: creation from the
@@ -135,17 +138,51 @@ disconnects.
 - **Current/next task:** `015-cutover-dev-stand` is the next phase in the dependency order,
   with `018-sweep-trx-float` already complete and the pre-cutover program finished. By owner
   decision the next phase is never started automatically.
-- **What still breaks at the switch, and is not a gate question.** The gate covered the
-  financial and money-adjacent surfaces and answered all of them. Three live surfaces outside
-  that scope still lose their backend and belong to no phase: the administrative log viewer
-  and the message pages, both served today and absent from v2; and the merchant dashboard
-  statistics, whose exclusion was already an owner decision because their withdrawal figures
-  came from the removed withdrawal model. Android self-update also stops working the moment
-  the stand is switched. Of these, the log viewer and the message pages have never been
-  assigned to anyone and want a decision of the same kind the gate gave the financial
-  surfaces; the merchant cards are already assigned to the legacy-removal phase, not to the
-  cutover; and Android self-update is the cutover phase's own work, along with the runbook and
-  the transport for infrastructure alerts.
+- **What still breaks at the switch — two things, both decided.** The merchant dashboard
+  statistics go blank, an exclusion the owner took earlier because their withdrawal figures
+  came from the removed withdrawal model; the cards are removed with the rest of the legacy
+  tree. And Android self-update stops the moment the stand is switched, which is the cutover
+  phase's own work, along with the runbook and the transport for infrastructure alerts.
+  Nothing else. The two surfaces that were open at the previous checkpoint - the device-log
+  viewer and the pages called "messages" - were settled at the second gate and are described
+  below.
+- **The device-log viewer is gone, and the reason is that its data will not exist.** It read
+  raw bank messages and device telemetry from a store the new architecture does not have: the
+  device log endpoint validates what a phone sends and keeps only counters. So the page had no
+  source to move to, which is what the earlier phase had already decided; this only carried it
+  out, together with the page's service, hooks, components and types, none of which had a
+  consumer anywhere else. What an operator loses is the investigation of a message that never
+  became a notification. The money-relevant half of that question - which notification
+  confirmed which deal - is answered by a table that is ported and read.
+- **The pages called "messages" were never messaging.** No author, no recipient, no thread, no
+  read state, no way to write: a read-only view of the bank messages harvested from devices.
+  The administrator keeps a cross-user search over that data as one canonical read; the trader
+  page moves to the read the platform already had; and the new search is not extended to
+  support, which keeps its scoped reads. A correction went with it: an earlier phase had excluded this surface because its
+  handler supposedly read two tables that had been dropped as dead. It did not, and the
+  mistake had been inherited once already.
+- **A deletion could destroy the only record of what confirmed a deal, and now cannot.** The
+  deal points at the bank notification that closed it, and that pointer is the only such
+  record anywhere: there is no deal history table, the audit trail covers other objects, and
+  the merchant callback carries no reference to it. Deleting a device used to take its
+  notifications with it and quietly empty that pointer - reachable only on
+  privileged and internal paths, never on a user's own. The evidence now
+  survives its device by construction, and only the notifications no deal refers to are
+  removed, so nothing is kept longer than before except the evidence itself.
+  Two rounds of review were spent defending that fix against itself. The cleanup it introduced
+  became the only code able to delete such a row, and it could: it decided a row was
+  unreferenced, waited on a lock a confirmation was holding, and then deleted on the stale
+  answer. It now re-checks after the wait. Locking those rows then created a cycle against
+  deal confirmation whose one branch would have made a payment the victim - reproduced, not
+  hypothesised - so the order was changed where it is ours to choose and the operation retries
+  once where the order comes from the database itself.
+- **Controls that do nothing are gone rather than left for the switch to expose.** A page whose
+  list and delete never existed in any backend and whose requests carried no credentials at
+  all; a set of support actions on requisites and devices that answer refusals today because
+  that role has no write routes. One removal was reverted after review, and it is the interesting one: a support
+  edit control saves through a route that does not exist for that role, so it looked as dead
+  as the rest - but it is also the only door to a contragent view whose reads the new platform
+  grants that role on purpose. Removing the dead write would have taken away live visibility.
 - **The constructor's trader filter is now real, and its option list is derived rather than
   assumed.** The dropdown used to call the payout queue's filter route, which no v2 phase
   owns; it now reads the constructor's own list. The filter itself had never filtered
