@@ -72,18 +72,18 @@ disconnects.
 
 - **Branch:** `architecture/financial-core-redesign`
 - **Completed phase:** `019-dispute-mechanism`, phase 18 of the accepted financial-core
-  redesign program, followed by a bounded pre-cutover program of ten implementing tasks and
-  two owner decision records, `020` through `031`, run across two gates. **It is finished.**
+  redesign program, followed by a bounded pre-cutover program of eleven implementing tasks and
+  two owner decision records, `020` through `032`, run across three gates. **It is finished.**
   A systematic sweep of every call the web client and the Android client make now finds no
   live surface left without a v2 backend, apart from two the owner excluded on purpose and
   which are named below. That is a point-in-time finding: nothing in the build keeps it true,
   so the next frontend change can falsify it silently.
-- **Implementation:** head `c14ff3c`, on top of
+- **Implementation:** head `fe6cf88`, on top of
   `1c1377705228506972f34a43deda8db3e3139e88`. The private branch is clean and
   synchronized with its remote.
-- **Remote verification:** `v2` workflow runs `33775802297`, `33795429640`, `33867747472` and
-  `33905870363`, each **success** across all three jobs (guards and contract, web, crypto),
-  first time, with no repair round. Commits pushed together are covered by the run on the head
+- **Remote verification:** `v2` workflow runs `33775802297`, `33795429640`, `33867747472`,
+  `33905870363` and `33921374210`, each **success** across all three jobs (guards and
+  contract, web, crypto), first time, with no repair round. Commits pushed together are covered by the run on the head
   of that push.
 - **What this phase delivers: a disputed deal can now be judged, and judging it moves money.**
   The read surface of the previous phase could show that a dispute existed but nothing could
@@ -158,9 +158,26 @@ disconnects.
   read state, no way to write: a read-only view of the bank messages harvested from devices.
   The administrator keeps a cross-user search over that data as one canonical read; the trader
   page moves to the read the platform already had; and the new search is not extended to
-  support, which keeps its scoped reads. A correction went with it: an earlier phase had excluded this surface because its
-  handler supposedly read two tables that had been dropped as dead. It did not, and the
-  mistake had been inherited once already.
+  support, which keeps its scoped reads. A correction went with it: an earlier phase had
+  excluded this surface because its handler supposedly read two tables that had been dropped
+  as dead. It did not, and the mistake had been inherited once already.
+- **Support's view of that data was then narrowed deliberately, and this is a tightening
+  against the old system rather than a port of it.** The owner decided that the role should
+  keep its diagnostic reads and lose the raw bank message body and the full payment number.
+  That now holds on every notification read the role can reach, because the decision is taken
+  in one place keyed on the caller and the projected shape is the only one the service can produce; two
+  guards fail the build if a future read hands out the unprojected row. What support sees
+  instead is the time, the bank, the amount, the parsing verdict, the identifiers already in
+  its scope, and the payment address masked to its last four characters. The mask follows the
+  value it hides rather than a stored column - for a fast-payment requisite those are two
+  different numbers, and masking from the column would have shown one number's tail under the
+  other's label.
+- **Support can no longer provision a device.** The refusal is a role policy on the route
+  rather than a hidden button, and the reason is that a device is part of the trusted channel
+  through which bank notifications arrive and deals are confirmed; provisioning one is not
+  something support does. No other role's device creation changed.
+- **Every notification read now has a page-size bound.** Six of the eight accepted any page
+  size.
 - **A deletion could destroy the only record of what confirmed a deal, and now cannot.** The
   deal points at the bank notification that closed it, and that pointer is the only such
   record anywhere: there is no deal history table, the audit trail covers other objects, and
@@ -239,6 +256,9 @@ disconnects.
   Merchants are refused outright, because no merchant insurance hold exists.
 - **What the owner deliberately did not restore:** rankings of traders and merchants, which
   would have been a new analytical feature rather than a preserved one.
+- **Open before the switch:** the last task left owner questions of its own, recorded
+  privately. They may add work before the cutover, so "the programme is finished" means its
+  agreed scope is delivered, not that no decision is pending.
 - **Next action:** none in flight.
 
 ### Phase boundaries deliberately held
