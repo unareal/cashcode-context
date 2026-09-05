@@ -72,18 +72,19 @@ disconnects.
 
 - **Branch:** `architecture/financial-core-redesign`
 - **Completed phase:** `019-dispute-mechanism`, phase 18 of the accepted financial-core
-  redesign program, followed by a bounded pre-cutover program of eleven implementing tasks and
-  two owner decision records, `020` through `032`, run across three gates. **It is finished.**
+  redesign program, followed by a bounded pre-cutover program of twelve implementing tasks and
+  two owner decision records, `020` through `033`, run across four gates. **Its agreed scope
+  is delivered.**
   A systematic sweep of every call the web client and the Android client make now finds no
   live surface left without a v2 backend, apart from two the owner excluded on purpose and
   which are named below. That is a point-in-time finding: nothing in the build keeps it true,
   so the next frontend change can falsify it silently.
-- **Implementation:** head `fe6cf88`, on top of
+- **Implementation:** head `308e1ee`, on top of
   `1c1377705228506972f34a43deda8db3e3139e88`. The private branch is clean and
   synchronized with its remote.
 - **Remote verification:** `v2` workflow runs `33775802297`, `33795429640`, `33867747472`,
-  `33905870363` and `33921374210`, each **success** across all three jobs (guards and
-  contract, web, crypto), first time, with no repair round. Commits pushed together are covered by the run on the head
+  `33905870363`, `33921374210` and `33933453367`, each **success** across all three jobs
+  (guards and contract, web, crypto), first time, with no repair round. Commits pushed together are covered by the run on the head
   of that push.
 - **What this phase delivers: a disputed deal can now be judged, and judging it moves money.**
   The read surface of the previous phase could show that a dispute existed but nothing could
@@ -178,6 +179,23 @@ disconnects.
   something support does. No other role's device creation changed.
 - **Every notification read now has a page-size bound.** Six of the eight accepted any page
   size.
+- **Support's side of that narrowing is now finished, because the first pass had held only
+  where someone thought to edit.** Support receives no full payment number
+  anywhere now, which took a three-way sweep of every registered read rather than a list of
+  suspected routes - and that sweep found a path neither earlier map had, a lookup that built
+  its nested deal card in the administrative shape whatever the caller was. The guard that
+  keeps it closed drives the whole API rather than one prefix, and a deliberately planted leak
+  was caught by it.
+- **A trader can no longer read another trader's device, requisite or notifications.** The
+  reads were scoped by the identifier in the address rather than by ownership. Nine reads
+  now answer one identical refusal whether the object is absent or belongs to somebody else,
+  because a different answer is itself the disclosure - the convention this platform had
+  already settled on for deals and disputes. Nothing a trader sees about its own objects
+  changed.
+- **Page bounds are keyed on the caller, like the projection, so the two cannot drift.** That
+  was itself a correction: the first version bounded the administrator as well, and the
+  constructor's requisite picker has no paging to compensate, so an operator would have
+  quietly lost candidates with no request that reached them.
 - **A deletion could destroy the only record of what confirmed a deal, and now cannot.** The
   deal points at the bank notification that closed it, and that pointer is the only such
   record anywhere: there is no deal history table, the audit trail covers other objects, and
@@ -256,9 +274,10 @@ disconnects.
   Merchants are refused outright, because no merchant insurance hold exists.
 - **What the owner deliberately did not restore:** rankings of traders and merchants, which
   would have been a new analytical feature rather than a preserved one.
-- **Open before the switch:** the last task left owner questions of its own, recorded
-  privately. They may add work before the cutover, so "the programme is finished" means its
-  agreed scope is delivered, not that no decision is pending.
+- **Open before the switch:** the last tasks left owner questions of their own, recorded
+  privately, including one write surface that has no caller and is proposed for removal rather
+  than for rules. They may add work before the cutover, so "the agreed scope is delivered"
+  does not mean no decision is pending.
 - **Next action:** none in flight.
 
 ### Phase boundaries deliberately held
