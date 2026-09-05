@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-09-03
+Last updated: 2026-09-05
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -71,230 +71,112 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `019-dispute-mechanism`, phase 18 of the accepted financial-core
-  redesign program, followed by a bounded pre-cutover program of thirteen implementing tasks
-  and two owner decision records, `020` through `034`, run across five gates. **It is
-  complete, and no known pre-cutover blocker remains.**
-  A systematic sweep of every call the web client and the Android client make now finds no
-  live surface left without a v2 backend, apart from two the owner excluded on purpose and
-  which are named below. That is a point-in-time finding: nothing in the build keeps it true,
-  so the next frontend change can falsify it silently.
-- **Implementation:** head `232097b`, on top of
-  `1c1377705228506972f34a43deda8db3e3139e88`. The private branch is clean and
-  synchronized with its remote.
-- **Remote verification:** `v2` workflow runs `33775802297`, `33795429640`, `33867747472`,
-  `33905870363`, `33921374210`, `33933453367` and `33955258057`, each **success** across all
-  three jobs (guards and contract, web, crypto). One run in between failed and is worth
-  recording, because the cause was not the change under test: a test that proves an upload
-  never spills a part to disk compared the whole shared temporary directory before and after
-  the request, so an unrelated artefact disappearing on the runner failed it. It now looks
-  only for additions, which is the property it exists for, and a planted file still fails it.
-  Commits pushed together are covered by the run on the head of that push.
-- **What this phase delivers: a disputed deal can now be judged, and judging it moves money.**
-  The read surface of the previous phase could show that a dispute existed but nothing could
-  open, answer or settle one. The whole mechanism is now on the v2 API: creation from the
-  panel, from the merchant public API and from the sandbox; the read lifecycle for every role;
-  accept and reject; evidence documents; the dispute-specific merchant notification; and the
-  operator and administrator actions. Fifty-three routes and one migration.
-- **Accepting a dispute is the only operation here that moves money, and it reuses the deal
-  confirmation path rather than a second one.** The deal-flow phase shipped that path
-  deliberately without a caller; this phase supplies it. Settlement, holds, limits and
-  counterparty slots are not rebuilt, so a dispute settles through exactly the same accounting
-  as an ordinary confirmation. Its two refusals are the requisite limit and insufficient
-  available funds; a counterparty slot shortage never refuses an accepted dispute. The dispute
-  transition, the settlement and the requisite auto-block commit in one transaction, so no
-  state exists in which a dispute is accepted while its deal is unsettled.
-- **Evidence files live in the database, not on a service's filesystem.** That was an owner
-  decision, and it removes a class of failure rather than a class of work: backup and restore
-  cover the evidence automatically, a redeployed or moved service loses nothing, and no
-  document row can outlive the bytes it points at. Uploads are streamed with an explicit
-  per-part bound and a request-size cap, and the ways a web framework silently spills a large
-  upload to a temporary file are forbidden by name - the prohibition had to be corrected once,
-  because its obvious form missed the one function that actually does the spilling, and what
-  enforces it is described under Known traps.
-- **Deleting evidence is soft, always.** Bytes, metadata, hash, uploader identity and history
-  survive; no route removes a row; a deleted document is simply not found on
-  every read path including the administrator's. The uploader may remove its own upload and an
-  administrator may remove any, but nobody destroys anything - physical destruction under a
-  retention or legal policy would be a separate owner decision. The per-dispute document
-  ceiling counts live rows, so a deletion frees a slot.
-- **Support staff can open a dispute and attach evidence, and can make no money decision.**
-  Accept, reject and any other settling action stay with the administrator and the dispute's
-  trader. The guard that used to assert this role has no write route at all was narrowed rather
-  than deleted: it now lists the three routes it may have and fails on a fourth.
-- **A trader reaching for another party's identifier is told the object does not exist.** Reads
-  of disputes by requisite, device or deal are scoped to what the caller owns, and an
-  unreachable object answers exactly as a nonexistent one does - the same body, on every
-  method including writes - so the answer cannot be used to discover that someone else's
-  dispute exists. Closing that hole was an owner decision, taken deliberately even though a
-  comparable legacy gap elsewhere was carried forward verbatim: an earlier decision to carry a
-  defect does not oblige new code to reproduce it.
-- **The sandbox cannot touch production.** Test credentials reach sandbox data only, with no
-  fallback to a production lookup, so they can neither create a real dispute nor trigger a real
-  merchant notification or auto-block. Today the sandbox holds no deal eligible for a dispute,
-  so the route answers "deal not found" - that is the current state of the sandbox, not the
-  endpoint's permanent meaning.
-- **Two deliberate departures from the old merchant wire are recorded rather than hidden.** A
-  deal in the error state now answers a client-side rejection instead of the server error the
-  old code produced through a defect in how it matched its own message; and the error envelope
-  keeps the three canonical keys instead of a fourth that carried internal validator text. Both
-  were owner decisions. Everything else on that wire, including the dispute notification
-  payload, is byte-identical to the old one.
-- **Current/next task:** `015-cutover-dev-stand` is the next phase in the dependency order,
-  with `018-sweep-trx-float` already complete and the pre-cutover program finished. By owner
-  decision the next phase is never started automatically.
-- **What still breaks at the switch — two things, both decided.** The merchant dashboard
-  statistics go blank, an exclusion the owner took earlier because their withdrawal figures
-  came from the removed withdrawal model; the cards are removed with the rest of the legacy
-  tree. And Android self-update stops the moment the stand is switched, which is the cutover
-  phase's own work, along with the runbook and the transport for infrastructure alerts.
-  Nothing else. The two surfaces that were open at the previous checkpoint - the device-log
-  viewer and the pages called "messages" - were settled at the second gate and are described
-  below.
-- **The device-log viewer is gone, and the reason is that its data will not exist.** It read
-  raw bank messages and device telemetry from a store the new architecture does not have: the
-  device log endpoint validates what a phone sends and keeps only counters. So the page had no
-  source to move to, which is what the earlier phase had already decided; this only carried it
-  out, together with the page's service, hooks, components and types, none of which had a
-  consumer anywhere else. What an operator loses is the investigation of a message that never
-  became a notification. The money-relevant half of that question - which notification
-  confirmed which deal - is answered by a table that is ported and read.
-- **The pages called "messages" were never messaging.** No author, no recipient, no thread, no
-  read state, no way to write: a read-only view of the bank messages harvested from devices.
-  The administrator keeps a cross-user search over that data as one canonical read; the trader
-  page moves to the read the platform already had; and the new search is not extended to
-  support, which keeps its scoped reads. A correction went with it: an earlier phase had
-  excluded this surface because its handler supposedly read two tables that had been dropped
-  as dead. It did not, and the mistake had been inherited once already.
-- **Support's view of that data was then narrowed deliberately, and this is a tightening
-  against the old system rather than a port of it.** The owner decided that the role should
-  keep its diagnostic reads and lose the raw bank message body and the full payment number.
-  That now holds on every notification read the role can reach, because the decision is taken
-  in one place keyed on the caller and the projected shape is the only one the service can produce; two
-  guards fail the build if a future read hands out the unprojected row. What support sees
-  instead is the time, the bank, the amount, the parsing verdict, the identifiers already in
-  its scope, and the payment address masked to its last four characters. The mask follows the
-  value it hides rather than a stored column - for a fast-payment requisite those are two
-  different numbers, and masking from the column would have shown one number's tail under the
-  other's label.
-- **Support can no longer provision a device.** The refusal is a role policy on the route
-  rather than a hidden button, and the reason is that a device is part of the trusted channel
-  through which bank notifications arrive and deals are confirmed; provisioning one is not
-  something support does. No other role's device creation changed.
-- **Every notification read now has a page-size bound.** Six of the eight accepted any page
-  size.
-- **Support's side of that narrowing is now finished, because the first pass had held only
-  where someone thought to edit.** Support receives no full payment number
-  anywhere now, which took a three-way sweep of every registered read rather than a list of
-  suspected routes - and that sweep found a path neither earlier map had, a lookup that built
-  its nested deal card in the administrative shape whatever the caller was. The guard that
-  keeps it closed drives the whole API rather than one prefix, and a deliberately planted leak
-  was caught by it.
-- **A trader can no longer read another trader's device, requisite or notifications.** The
-  reads were scoped by the identifier in the address rather than by ownership. Nine reads
-  now answer one identical refusal whether the object is absent or belongs to somebody else,
-  because a different answer is itself the disclosure - the convention this platform had
-  already settled on for deals and disputes. Nothing a trader sees about its own objects
-  changed.
-- **Page bounds are keyed on the caller, like the projection, so the two cannot drift.** That
-  was itself a correction: the first version bounded the administrator as well, and the
-  constructor's requisite picker has no paging to compensate, so an operator would have
-  quietly lost candidates with no request that reached them.
-- **A write nobody made was deleted rather than governed.** One route accepted a manual
-  change to a notification's status that nothing in the platform ever made: no page, no
-  application, no worker, no script, and no accepted document had ever stated a purpose for
-  it. Writing a permission model for it would have been inventing a workflow, so it is gone;
-  the automatic paths that set the same statuses after matching are untouched.
-- **The last ownership gap on that family is closed.** Two writes in it did not check
-  ownership while their four neighbours did - an inconsistent family is exactly where a gap
-  hides. The check now runs before the change, and the test that
-  proves it is a comparison of the other trader's data before and after the refused request -
-  because a gate placed after the write still returns the right refusal, and only the
-  comparison catches that.
-- **A deletion could destroy the only record of what confirmed a deal, and now cannot.** The
-  deal points at the bank notification that closed it, and that pointer is the only such
-  record anywhere: there is no deal history table, the audit trail covers other objects, and
-  the merchant callback carries no reference to it. Deleting a device used to take its
-  notifications with it and quietly empty that pointer - reachable only on
-  privileged and internal paths, never on a user's own. The evidence now
-  survives its device by construction, and only the notifications no deal refers to are
-  removed, so nothing is kept longer than before except the evidence itself.
-  Two rounds of review were spent defending that fix against itself. The cleanup it introduced
-  became the only code able to delete such a row, and it could: it decided a row was
-  unreferenced, waited on a lock a confirmation was holding, and then deleted on the stale
-  answer. It now re-checks after the wait. Locking those rows then created a cycle against
-  deal confirmation whose one branch would have made a payment the victim - reproduced, not
-  hypothesised - so the order was changed where it is ours to choose and the operation retries
-  once where the order comes from the database itself.
-- **Controls that do nothing are gone rather than left for the switch to expose.** A page whose
-  list and delete never existed in any backend and whose requests carried no credentials at
-  all; a set of support actions on requisites and devices that answer refusals today because
-  that role has no write routes. One removal was reverted after review, and it is the interesting one: a support
-  edit control saves through a route that does not exist for that role, so it looked as dead
-  as the rest - but it is also the only door to a contragent view whose reads the new platform
-  grants that role on purpose. Removing the dead write would have taken away live visibility.
-- **The constructor's trader filter is now real, and its option list is derived rather than
-  assumed.** The dropdown used to call the payout queue's filter route, which no v2 phase
-  owns; it now reads the constructor's own list. The filter itself had never filtered
-  anything - the selection went nowhere, and in the old code the parameter the client did send
-  was silently dropped because the request had no field for it. By owner decision it now
-  narrows the already-received result on the client; the server-side requisite search is
-  untouched. The option list had to widen to satisfy the rule the owner set: anyone who can
-  appear in the result must be selectable. It therefore offers the owner of an active
-  requisite on an active device, consulting neither the owner's status nor its type, because
-  either predicate would leave rows that no filter value can reach. One defect that widening
-  would otherwise have introduced is fixed with it: a requisite hidden by the filter no longer
-  stays selected, which would have built the deal on a requisite nobody could see.
-- **Insurance administration is ported, reads first and then the edit.** The reads show the
-  canonical quantity rather than a translation of the old one: a requirement is covered when
-  the trader's balance reaches it. A literal port was impossible, because the old "paid"
-  column counted money already taken from the user and no such money exists in this
-  architecture. The edit was held back until the owner decided what it should mean, and now
-  means one thing only - see below.
-- **A method note worth keeping: grepping the legacy route file alone under-reports the legacy
-  surface.** Roughly thirty admin routes are registered indirectly, through handler registrars
-  rather than at the call site, and two sweeps missed them before this was noticed. Anything
-  that enumerates what the switch breaks has to follow those registrars.
-- **The financial surfaces the sweeps raised were decided at an owner gate, and the decisions
-  are now carried out.** The gate is recorded as a durable decision record rather than left in
-  conversation, and each decision names the task that executes it. What went back is only what has one meaning in v2; what
-  rested on removed mechanisms or on constants invented in the code did not.
-- **The dashboards keep the revenue that is real and lose the arithmetic that was not.**
-  Platform revenue is restored as today's figure and a daily series, both the same quantity
-  the charts panel already reported, pinned to it by a test so the two cannot drift. Pending
-  settlements, TRX spend, net profit and margin did not come back: each rested on a removed
-  table or on a hardcoded cost factor. The custody block is assembled from reads that already
-  existed. The top-trader and top-merchant cards were removed without functional loss, because
-  both queries summed a column the deal table does not have and the error was being swallowed
-  - they had been empty all along. One rule now runs through these panels: a money figure the
-  panel does not have is never rendered as zero, so a failed read says so instead of reporting
-  that the platform holds nothing.
-- **The batch-settlement button is gone rather than left dead.** It moved money on chain,
-  which v2 does not do for a deal at all: a deal settles as ledger postings and the web side
-  cannot broadcast, so the control would have answered "processing" and done nothing.
-- **Configuration editing came back deliberately narrow.** The replacement derives its key set
-  from the typed registry, refuses a key it does not declare and a value that does not fit its
-  declared type, and reaches only settings the web side owns; everything belonging to the
-  custody side or to deployment stays where the architecture puts it, out of reach of the
-  business API. A rejected request changes nothing at all, including the valid keys that
-  travelled with it.
-- **The notification bell has a reader again.** The web side was already writing notifications
-  that nothing could display, so the rows were accumulating unseen. Read state is per
-  administrator, and the count is the whole unread set rather than one page of it.
-- **An administrator can change a trader's insurance requirement, and nothing moves.** In the
-  old system that edit signed a real transfer between the trader's wallet and a platform
-  wallet; the accepted architecture inverts that, so the edit now changes only the size of the
-  hold. Raising it takes nothing and lowering it returns nothing - what changes is how much of
-  the trader's own balance is reserved, and therefore how much they can withdraw, immediately.
-  Merchants are refused outright, because no merchant insurance hold exists.
-- **What the owner deliberately did not restore:** rankings of traders and merchants, which
-  would have been a new analytical feature rather than a preserved one.
-- **Open before the switch:** every question that changes what happens at the switch is
-  answered and carried out. One is still with the owner and does not: a support control whose
-  save has no route for that role, and which is at the same time the only way that role
-  reaches a view it is deliberately allowed. Keeping it leaves a control that cannot work;
-  removing it takes away a permitted read. What remains for the cutover phase is its own work:
-  the runbook, the transport for infrastructure alerts, and Android self-update.
+- **Completed phase:** `015-cutover-dev-stand` — the repository half of the stand
+  cutover. **The phase was split by owner decision**, and that split is the most
+  important fact in this checkpoint. It delivers only what repository checks can
+  accept; everything that needs a live stand became a new mandatory phase,
+  `035-live-cutover-validation`, registered in the master task with an explicitly
+  written dependency position: immediately after this one, mandatory before
+  production, and mandatory before any claim that the new financial path is
+  verified end to end. It is not optional late work, and it does not start
+  automatically. The reason for splitting is that a single phase would have run
+  to its commit gate and been unable to close, because several of its acceptance
+  criteria require an owner pressing a button on a real chain.
+- **Implementation:** head `caf80ad`, on top of `232097b`. The branch is clean
+  and synchronized with its remote.
+- **Remote verification:** `v2` run `33986241821`, **success** across all three
+  jobs (guards and contract, web, crypto).
+- **Infrastructure alerts have a delivery path now, on the custody side.** Seven
+  conditions were being detected and delivered nowhere - unswept funds and their
+  age, low chain-fee balance, suspended top-ups, stuck custody operations and
+  reconciliation divergence - and this phase adds two more: a hot-wallet balance
+  running low, which nothing detected at all before, and the freeze described
+  below, which the phase itself introduces. Nine in total. The existing owner
+  channel gained a second class of message that is not tied to a withdrawal
+  request, and it neither reads nor writes the request journal, so an operational
+  alert can never look like a payout. Volume is bounded per subject, and per pass
+  for the conditions a reporting sweep produces - the freeze below is deliberately
+  outside that second bound, so a mass failure sends one message per frozen
+  request rather than hiding any of them behind a count. Delivery
+  happens outside every database transaction, and no operator-supplied
+  or error-derived text crosses to the messenger - the message says a reason
+  exists and where to read it. What is proven is the path up to the transport:
+  the bot's own configuration and the owner allow-list belong to the live phase,
+  and a command exists precisely so that delivery can be demonstrated there.
+- **The web side deliberately gets no messenger credential.** That was already
+  the architecture, and it is kept: web writes structured records instead, and
+  the phase publishes the catalogue of its critical identifiers as the selector
+  an infrastructure log relay reads. A test derives that catalogue from the
+  sources by parsing them, resolves identifiers declared as constants, and fails
+  closed on anything it cannot resolve - a text scan would have found twelve of
+  twenty. Acceptance of an actually-delivering relay belongs to the live phase.
+- **Recovery no longer trusts a node that says "found".** This is the
+  money-relevant change and the owner chose to make it now rather than defer it,
+  reasoning that the live phase must exercise the intended final semantics rather
+  than a knowingly weaker one. Before a withdrawal or an internal custody
+  operation may move to a state meaning the transaction was broadcast, the body
+  the node returned must prove it is the transaction the system intended to sign:
+  the identifier recomputed from the body, then the decoded contract against the
+  immutable intent. A refusal releases no hold, creates no broadcast evidence,
+  opens no rebuild and spends no repeat budget. There is deliberately no fallback
+  of "no body returned, so trust the identifier".
+- **That refusal would otherwise have been silent, so it raises its own alert.**
+  A request refused this way never rebuilds, never exhausts its budget and
+  therefore never reaches the one state the owner channel reports - while holding
+  a user's money. The asymmetry was visible inside the phase: the same refusal on
+  an internal operation was already reported. The money-holding case was the
+  quiet one.
+- **Its accepted price, worth knowing before the live phase:** a node that keeps
+  claiming it knows a transaction whose body cannot be verified leaves the
+  request frozen with the hold held, and the operator tool cannot land it. The
+  runbook names that cause, and the live phase is required to check the real
+  node's answer and correct the decoder to the observed wire format if it differs
+  - **without removing the verification**. Restoring trust-by-identifier is
+  explicitly not an option.
+- **Devices keep updating after the switch.** The binary-distribution route the
+  new API did not serve is ported with the frozen handler's eleven branches, its
+  own timestamp-and-signature scheme, and its version comparison taken from the
+  same library the old code used - which also closes a pre-release divergence an
+  earlier phase had recorded as preserved. Without it the switch would have left
+  the update prompt working and the download failing.
+- **Deployment templates exist, and a guard keeps them templates.** Reverse-proxy
+  configuration, service units and a relay unit ship with every host-specific
+  value externalized, and a structural guard fails the build on a host name, an
+  address, a credential or a migration-at-startup switch. The guard carries its
+  own 65-case self-test that runs on every invocation and asserts, besides the
+  right verdict, that no message repeats a planted value.
+- **Configuration and operability.** Both configuration examples were incomplete
+  enough that copying them produced a service that refuses to start; they are
+  fixed and pinned by tests. A build target writes the four executables. Command
+  line tools create the first administrator, purge expired sessions and purge
+  spent widget tokens.
+- **One deliberate improvement over the old behaviour, decided by the owner:**
+  spent widget tokens are deleted after a day, but the old proactive expiry
+  marking is not restored, because it would have turned the first read of an
+  expired token from a not-found answer into a server error. The table stops
+  growing, and one merchant-visible change comes with it deliberately: re-reading
+  an expired token used to give a server error forever, and after the purge it
+  gives not-found again. The old permanent server error is explicitly not
+  preserved as a compatibility requirement.
+- **No threshold was invented.** The alert threshold the sweep phase deferred
+  here is configurable and **inactive when unset**, because the owner's standing
+  rule is that thresholds arrive with measurements. Choosing it is the live
+  phase's work, and the runbook lists it as a switch-time precondition so it
+  cannot be forgotten.
+- **Current/next task:** `035-live-cutover-validation`. It requires separate
+  owner authorization and real key material; by owner decision it never starts
+  automatically.
+- **What still breaks at the switch, and it is now one thing rather than two.**
+  Device self-update is fixed here. The merchant dashboard statistics still go
+  blank - an exclusion the owner took earlier, because those figures came from a
+  withdrawal model that no longer exists - and the dead cards are removed with the
+  rest of the legacy tree by `016-legacy-removal`.
+- **One owner question is still open, and it is not this phase's.** A support
+  control whose save has no route for that role, and which is at the same time the
+  only way that role reaches a view it is deliberately allowed to see: keeping it
+  leaves a control that cannot work, removing it takes away a permitted read. It
+  was raised by the dead-surface phase and has not come back. It does not change
+  what happens at the switch.
 - **Next action:** none in flight.
 
 ### Phase boundaries deliberately held
@@ -305,7 +187,8 @@ is not evidence that its behavior is implemented.
 - **Nothing in the v2 core has been exercised against real infrastructure.** The deposit, sweep
   and withdrawal paths are complete and covered by tests, but assembly, broadcast and the owner's
   approval have never run against a live chain or a real bot, and the panel has never spoken to a
-  running v2 stand. All of that is first proven at the cutover phase.
+  running v2 stand. This is now the explicit content of `035-live-cutover-validation`, and it is
+  why that phase exists: the repository half is finished and proves nothing about a live stand.
 - **Relocating custody to cold storage is not built and is not a treasury withdrawal.** It is a
   different operation with a different accounting model; folding it into the treasury path would
   hide a second kind of money movement inside an existing one.
@@ -534,7 +417,66 @@ Completed architecture/specification milestones:
   alone are exactly where a defect survives longest, and a fix should make the mistake
   unexpressible rather than merely absent.
 
+- Tasks 020-034 completed and remotely verified: a bounded pre-cutover programme of
+  thirteen implementing tasks and two owner decision records, run across five gates, after
+  which a systematic sweep of every call the web and device clients make found no live
+  surface without a backend behind it, beyond the exclusions the owner accepted on purpose
+  and which are named above. That was a point-in-time finding: nothing in the build keeps it
+  true, so the next client change can falsify it silently. The durable results, all still in force: an
+  administrator's edit of a trader's insurance requirement moves no money - it changes the
+  size of a hold, so what changes is how much of the trader's own balance is reserved, and
+  merchants are refused outright because no merchant insurance hold exists; support keeps
+  its diagnostic reads but receives no raw bank message body and no full payment number
+  anywhere, and cannot provision a device, because a device is part of the trusted channel
+  through which deals are confirmed; a trader cannot read another trader's device,
+  requisite or notifications, and an unreachable object answers exactly as a nonexistent
+  one does, on every method, because a different answer is itself the disclosure; evidence
+  that a deal was confirmed survives the deletion of the device that produced it; and one
+  rule runs through the panels - a money figure the panel does not have is never rendered
+  as zero, so a failed read says so instead of reporting that the platform holds nothing.
+- Task 015 completed and remotely verified: the repository half of the stand cutover, split
+  from the live half by owner decision. Nine owner decisions are recorded in its
+  specification. Four of the five entries under Known traps come from it, and two of
+  those cost several review rounds each: a guard that refuses a secret must not quote it, and a
+  safety rule that enumerates bad inputs will be defeated by the next input nobody
+  enumerated. The independent reviews earned their place here as they did earlier: before
+  any code existed they caught an acceptance criterion resting on a command that cannot run
+  in this baseline - the second time that same criterion had to be removed - and after
+  implementation they caught a freeze that held a user's money and reported it to nobody,
+  a concurrent rebuild that would have raised a false alarm about a healthy request, and a
+  guard whose failure message published the password it had just refused.
+
 ## Known traps
+
+- **A guard that reports a secret must not quote it.** The template guard refused a
+  connection string carrying a password and printed the password in the refusal,
+  into a log that outlives the refused commit. It took four rounds to close,
+  because each round blacklisted the character that had just been demonstrated -
+  first the credential prefix, then a slash in the password, then seven more
+  separators. What finally worked was inverting the rule: print the address only
+  when it matches a safe shape **and** the line carries no credential separator at
+  all, which is a syntactic property rather than a list of characters. The lesson
+  generalises past this guard: a check that decides safety by enumerating bad
+  inputs is a check that will be defeated by the next input nobody enumerated.
+- **A test that asserts only "not the success code" proves almost nothing.** The
+  path-traversal criterion was satisfied by a status check that a plain routing
+  mismatch also satisfies, so it would have passed if the guard it exists to pin
+  had been moved ahead of the check that actually answers. Assert the body.
+- **Routing decides more than it looks like it does.** A parent reference reaches
+  the handler as an ordinary parameter value, while anything carrying a path
+  separator - encoded or not - is answered by the router before any handler runs,
+  because matching happens on the unescaped path. Both are safe here, but they are
+  safe for different reasons, and a criterion that assumes one mechanism for both
+  describes something that does not happen.
+- **Detection is not delivery.** An alert condition can be implemented, tested and
+  still reach nobody, because the state it produces is not the state the notifier
+  watches. The freeze introduced by the recovery check was exactly that: correct,
+  covered, and silent. Check the path from condition to person, not the condition.
+- **The frontend lint command is permanently broken in this baseline** - it fails
+  while loading a rule, on the first file it is given, so its result is
+  independent of the code. It has now been written into an acceptance criterion twice and removed
+  twice. The reason it keeps coming back is that the master task's own check list
+  still names it; a phase that copies that list inherits the defect.
 
 - **The order of parts in a multipart dispute upload is load-bearing.** `deal_id` and `reason`
   must be sent before the first file part; a non-file part after it is refused with a 400. That
