@@ -72,20 +72,24 @@ disconnects.
 
 - **Branch:** `architecture/financial-core-redesign`
 - **Completed phase:** `019-dispute-mechanism`, phase 18 of the accepted financial-core
-  redesign program, followed by a bounded pre-cutover program of twelve implementing tasks and
-  two owner decision records, `020` through `033`, run across four gates. **Its agreed scope
-  is delivered.**
+  redesign program, followed by a bounded pre-cutover program of thirteen implementing tasks
+  and two owner decision records, `020` through `034`, run across five gates. **It is
+  complete, and no known pre-cutover blocker remains.**
   A systematic sweep of every call the web client and the Android client make now finds no
   live surface left without a v2 backend, apart from two the owner excluded on purpose and
   which are named below. That is a point-in-time finding: nothing in the build keeps it true,
   so the next frontend change can falsify it silently.
-- **Implementation:** head `308e1ee`, on top of
+- **Implementation:** head `232097b`, on top of
   `1c1377705228506972f34a43deda8db3e3139e88`. The private branch is clean and
   synchronized with its remote.
 - **Remote verification:** `v2` workflow runs `33775802297`, `33795429640`, `33867747472`,
-  `33905870363`, `33921374210` and `33933453367`, each **success** across all three jobs
-  (guards and contract, web, crypto), first time, with no repair round. Commits pushed together are covered by the run on the head
-  of that push.
+  `33905870363`, `33921374210`, `33933453367` and `33955258057`, each **success** across all
+  three jobs (guards and contract, web, crypto). One run in between failed and is worth
+  recording, because the cause was not the change under test: a test that proves an upload
+  never spills a part to disk compared the whole shared temporary directory before and after
+  the request, so an unrelated artefact disappearing on the runner failed it. It now looks
+  only for additions, which is the property it exists for, and a planted file still fails it.
+  Commits pushed together are covered by the run on the head of that push.
 - **What this phase delivers: a disputed deal can now be judged, and judging it moves money.**
   The read surface of the previous phase could show that a dispute existed but nothing could
   open, answer or settle one. The whole mechanism is now on the v2 API: creation from the
@@ -196,6 +200,17 @@ disconnects.
   was itself a correction: the first version bounded the administrator as well, and the
   constructor's requisite picker has no paging to compensate, so an operator would have
   quietly lost candidates with no request that reached them.
+- **A write nobody made was deleted rather than governed.** One route accepted a manual
+  change to a notification's status that nothing in the platform ever made: no page, no
+  application, no worker, no script, and no accepted document had ever stated a purpose for
+  it. Writing a permission model for it would have been inventing a workflow, so it is gone;
+  the automatic paths that set the same statuses after matching are untouched.
+- **The last ownership gap on that family is closed.** Two writes in it did not check
+  ownership while their four neighbours did - an inconsistent family is exactly where a gap
+  hides. The check now runs before the change, and the test that
+  proves it is a comparison of the other trader's data before and after the refused request -
+  because a gate placed after the write still returns the right refusal, and only the
+  comparison catches that.
 - **A deletion could destroy the only record of what confirmed a deal, and now cannot.** The
   deal points at the bank notification that closed it, and that pointer is the only such
   record anywhere: there is no deal history table, the audit trail covers other objects, and
@@ -274,10 +289,12 @@ disconnects.
   Merchants are refused outright, because no merchant insurance hold exists.
 - **What the owner deliberately did not restore:** rankings of traders and merchants, which
   would have been a new analytical feature rather than a preserved one.
-- **Open before the switch:** the last tasks left owner questions of their own, recorded
-  privately, including one write surface that has no caller and is proposed for removal rather
-  than for rules. They may add work before the cutover, so "the agreed scope is delivered"
-  does not mean no decision is pending.
+- **Open before the switch:** every question that changes what happens at the switch is
+  answered and carried out. One is still with the owner and does not: a support control whose
+  save has no route for that role, and which is at the same time the only way that role
+  reaches a view it is deliberately allowed. Keeping it leaves a control that cannot work;
+  removing it takes away a permitted read. What remains for the cutover phase is its own work:
+  the runbook, the transport for infrastructure alerts, and Android self-update.
 - **Next action:** none in flight.
 
 ### Phase boundaries deliberately held
