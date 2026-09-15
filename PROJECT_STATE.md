@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-09-05
+Last updated: 2026-09-15
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -71,7 +71,38 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `015-cutover-dev-stand` — the repository half of the stand
+- **Completed phase:** `035-live-cutover-validation` — the live half of the stand
+  cutover, and the first phase whose evidence is a real chain rather than a fake
+  node. It is what makes "the new financial path is verified end to end" a
+  statement about observation instead of about tests. Its acceptance set is 73
+  criteria: **71 passed**, and **two are owner-accepted deviations that are not
+  counted as passes** — an administrator's second factor was configured after the
+  reverse-proxy switch rather than before it, and two intermediate work sessions
+  left no preflight record. Both are historically unrecoverable; the owner
+  disposed of them explicitly, and the record says so rather than rounding up to
+  "all passed".
+- **What the live run proved.** A deposit discovered and credited exactly once; a
+  deal carried through the production merchant route to settlement; a payout
+  signed only after the owner pressed the button and confirmed by the network;
+  automatic sweep and top-up running unattended; reconciliation agreeing. A
+  second, small payout exercised recovery between "signed" and "broadcast" and
+  landed in the genuinely uncertain state — body signed and stored, send outcome
+  unknown — where recovery re-verified the body, broadcast nothing twice, and
+  left exactly one transfer on the chain. The refusal paths were exercised too:
+  an address outside the allow-list refused before the owner was ever asked, an
+  administrator login refused while the replay store was down, and the log relay
+  delivering exactly one of seventy-eight records.
+- **Four defects only a live run could find.** Two of them stopped deposits
+  outright and neither was reachable by any test, because the fake node answers
+  in a different address representation and never drops a connection: the node
+  client kept idle connections longer than the upstream does, and the contract
+  address in an event log was compared in the wrong representation, so every
+  transfer record was skipped silently. A third made the merchant API impossible
+  to use on a clean database, since nothing could issue the first API secret. The
+  fourth was alert noise with teeth: an ordinary command handover raised a
+  critical divergence alert, six times, on the one channel reserved for "the two
+  sides disagree about whose money is where".
+- **Previous phase:** `015-cutover-dev-stand` — the repository half of the stand
   cutover. **The phase was split by owner decision**, and that split is the most
   important fact in this checkpoint. It delivers only what repository checks can
   accept; everything that needs a live stand became a new mandatory phase,
@@ -177,7 +208,13 @@ disconnects.
   leaves a control that cannot work, removing it takes away a permitted read. It
   was raised by the dead-surface phase and has not come back. It does not change
   what happens at the switch.
-- **Next action:** none in flight.
+- **The cutover that was validated is the development stand's, not production's.**
+  Production has not been cut over, and nothing in this phase authorises it. The
+  live run happened on a test network with test funds, on a disposable private
+  stand, under an authorisation that explicitly excluded production, mainnet and
+  production secrets.
+- **Next action:** none in flight. The next phase has not been started, and it
+  does not start by itself.
 
 ### Phase boundaries deliberately held
 
@@ -447,6 +484,36 @@ Completed architecture/specification milestones:
   guard whose failure message published the password it had just refused.
 
 ## Known traps
+
+- **A service token that is a child of the bootstrap root token dies with it.**
+  Revoking a bootstrap root token is ordinary hygiene, and it silently revoked a
+  long-lived service credential that had been verified as *separate* — different
+  value, own policy, own file. Separate is not the same as independent: the
+  check that matters is whether the token is an orphan. The failure is delayed
+  and therefore deceptive, because the service keeps running on what it already
+  read and only fails at its next restart, when nobody connects the two events.
+  A long-lived service token must be created as an orphan.
+- **Unseal material stored beside the data it protects protects nothing at
+  rest.** Whoever reaches the host reaches both. Acceptable on a disposable
+  stand, never in production, and the distinction has to be written down where
+  the next reader will look rather than assumed.
+- **Compile-time configuration makes every environment a separate build.** The
+  device application carries its server address and its device secret as
+  constants with no runtime override, so an artifact built for one environment
+  cannot be pointed at another, and a build made for a test stand carries that
+  stand's secret inside it. Discovering this when the hardware arrives is
+  expensive; it is a property to check before a phase depends on it.
+- **A negative observation without a positive control proves nothing.** "No
+  alerts were delivered" and "the alerting is dead" look identical. Every
+  selectivity check in this phase carries a deliberate positive delivery in the
+  same interval, and the same discipline caught a divergence-alert fix that
+  could otherwise have been mistaken for working.
+- **An exclusion keyed on an identifier can silence more than it means to.** The
+  fix for the false divergence alerts was first keyed on the request identifier,
+  which also masked divergence that existed for an unrelated reason, because the
+  open-request list is a union of independent sources. Keying it on the row
+  actually being handed over is the narrow form; the wide form passed every test
+  until a reviewer constructed the case.
 
 - **A guard that reports a secret must not quote it.** The template guard refused a
   connection string carrying a password and printed the password in the refusal,
@@ -1004,7 +1071,21 @@ forgotten:
 - Clean up Android secret handling and sensitive logging, remove unsafe
   fallback secret behavior and duplicated cryptographic logic, and add
   regression tests for critical notification/SMS parsing while preserving the
-  device API cryptographic contract.
+  device API cryptographic contract. The live phase confirmed the concrete
+  shape: the application writes the activation payload and the device secret to
+  its debug log in plain text, and the network security configuration present in
+  the tree is not referenced from the manifest, so cleartext HTTP is permitted
+  to every host.
+- Design how production unseals its secret store and where that material lives.
+  It must not sit on the same host as the data it protects, which is what the
+  disposable stand does deliberately and what production must not inherit.
+- Make the device application's server address and device secret configurable
+  without a rebuild, or accept that every environment needs its own signed
+  artifact carrying that environment's secret.
+- The residual false-positive class in the divergence alert: a ready command
+  that a claim batch could not carry still raises a critical record every cycle
+  until it is handed over. Invisible below the batch size, visible on a real
+  backlog.
 
 ## Update policy
 
