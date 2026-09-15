@@ -194,9 +194,9 @@ disconnects.
   rule is that thresholds arrive with measurements. Choosing it is the live
   phase's work, and the runbook lists it as a switch-time precondition so it
   cannot be forgotten.
-- **Current/next task:** `035-live-cutover-validation`. It requires separate
-  owner authorization and real key material; by owner decision it never starts
-  automatically.
+- **Current/next task:** `035-live-cutover-validation` is CLOSED. The next
+  planned phase is `016-legacy-removal`, and it has NOT STARTED: by owner
+  decision it never starts automatically, and it is not a production cutover.
 - **What still breaks at the switch, and it is now one thing rather than two.**
   Device self-update is fixed here. The merchant dashboard statistics still go
   blank - an exclusion the owner took earlier, because those figures came from a
