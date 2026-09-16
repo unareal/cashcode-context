@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-09-15
+Last updated: 2026-09-16
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -12,19 +12,22 @@ CashCode is a payment and trading platform with Go services, PostgreSQL, a
 React/TypeScript web client, and a Kotlin/Compose Android device application.
 
 CashCode v2 is a **selective rewrite**, not a full rewrite and not an in-place
-refactor. The legacy backend is a frozen reference that keeps the development
-stand working and documents existing behavior; it is not the v2 foundation.
-New work belongs in independent `services/web`, `services/crypto`, and the
-minimal wire-only `services/contract` module. None may import the legacy
-backend.
+refactor. The legacy backend served as a frozen reference while v2 was being
+ported; after v2 acceptance it was physically removed from the repository
+(phase `016-legacy-removal`). The only code is `services/web`, `services/crypto`
+and the minimal wire-only `services/contract` module, plus the web client and
+the Android application. Old behavior is read from git history at the parent
+of the removal commit and from the recorded legacy evidence under
+`docs/platform/`; the legacy module path must never be imported again, and a
+structural guard keeps it out.
 
 Kept with cleanup: clients and non-financial product behavior, including auth,
 users and permissions, requisites and devices, disputes, merchant API and
 sandbox contracts, IPN, widget, fees, and exchange rates. Rewritten: backend
 wiring and transaction boundaries, the financial data model, deal lifecycle,
-ledger and holds, deposits, withdrawals, custody, and the financial UI. Legacy
-wallet, queue, batch, MultiSend, and fragmented withdrawal mechanisms are to be
-removed after v2 acceptance.
+ledger and holds, deposits, withdrawals, custody, and the financial UI. The
+legacy wallet, queue, batch, MultiSend and fragmented withdrawal mechanisms
+were removed together with the legacy tree after v2 acceptance.
 
 ## Target financial architecture
 
@@ -71,7 +74,45 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `035-live-cutover-validation` — the live half of the stand
+- **Completed phase:** `016-legacy-removal` — the repository no longer carries the
+  legacy platform. The frozen legacy Go backend (289 files) is deleted, and so
+  are the legacy how-to documents that described running it, the residual web
+  client code with no working purpose after the switch (27 modules nothing
+  imports, dead service and store members, the merchant dashboard cards fed by a
+  statistics route that v2 deliberately does not serve, a stray script at the
+  web client's root), and the instruction rules that applied only to it. Repository tooling, guards, CI comments,
+  ignore rules and the instruction documents now describe a v2-only tree; every
+  structural guard check is kept, including the ones that refuse the legacy
+  module path and a root Go workspace.
+- **What is deliberately retained.** The recorded legacy evidence -
+  `docs/platform/legacy-deal-rules.md` and the frozen SQL snapshot under
+  `docs/platform/legacy-sql/` - stays, because v2 code and a dozen accepted
+  specifications cite it by rule identifier and line, and the export script that
+  reproduces the snapshot stays with it. Provenance comments in `services/**`
+  that cite a legacy file and line are left as they are; they resolve against
+  the parent of the removal commit.
+- **One role-visible change, decided by the owner, and it is not a permission
+  change.** The support role's "Edit" control on a requisite could never save
+  (no write route exists for that role) but was the role's only way to see a
+  set of requisite settings and the counterparty list that v2 deliberately
+  serves it. The owner ruled that a dead write control must not survive as a
+  false affordance and that the replacement must not narrow what the role
+  already saw: it is now an explicit read-only "view" control showing the same
+  fields as text plus the counterparty list, issuing no write request; the
+  administrator's edit flow is untouched. The earlier ruling that the support
+  role never creates or owns trusted bank-notification devices stands.
+- **Repository-only, by owner decision.** Nothing on the development stand was
+  touched: its remaining legacy leftovers (an old database, a disabled
+  reverse-proxy site, stale binaries and logs, an old secret-store process, an
+  out-of-tree source copy) are recorded in the phase specification and need
+  their own authorisation before anyone removes them. Production and mainnet
+  were not touched, and the phase authorises no production cutover.
+- **Implementation:** head `baa180e`, on top of `bd99154`; 357 files, 1528
+  insertions, 124409 deletions. The branch is clean and synchronized with its
+  remote.
+- **Remote verification:** `v2` run `35037785540`, **success** across all three
+  jobs (guards and contract, web, crypto).
+- **Previous phase:** `035-live-cutover-validation` — the live half of the stand
   cutover, and the first phase whose evidence is a real chain rather than a fake
   node. It is what makes "the new financial path is verified end to end" a
   statement about observation instead of about tests. Its acceptance set is 73
@@ -102,118 +143,34 @@ disconnects.
   fourth was alert noise with teeth: an ordinary command handover raised a
   critical divergence alert, six times, on the one channel reserved for "the two
   sides disagree about whose money is where".
-- **Previous phase:** `015-cutover-dev-stand` — the repository half of the stand
-  cutover. **The phase was split by owner decision**, and that split is the most
-  important fact in this checkpoint. It delivers only what repository checks can
-  accept; everything that needs a live stand became a new mandatory phase,
-  `035-live-cutover-validation`, registered in the master task with an explicitly
-  written dependency position: immediately after this one, mandatory before
-  production, and mandatory before any claim that the new financial path is
-  verified end to end. It is not optional late work, and it does not start
-  automatically. The reason for splitting is that a single phase would have run
-  to its commit gate and been unable to close, because several of its acceptance
-  criteria require an owner pressing a button on a real chain.
-- **Implementation:** head `caf80ad`, on top of `232097b`. The branch is clean
-  and synchronized with its remote.
-- **Remote verification:** `v2` run `33986241821`, **success** across all three
-  jobs (guards and contract, web, crypto).
-- **Infrastructure alerts have a delivery path now, on the custody side.** Seven
-  conditions were being detected and delivered nowhere - unswept funds and their
-  age, low chain-fee balance, suspended top-ups, stuck custody operations and
-  reconciliation divergence - and this phase adds two more: a hot-wallet balance
-  running low, which nothing detected at all before, and the freeze described
-  below, which the phase itself introduces. Nine in total. The existing owner
-  channel gained a second class of message that is not tied to a withdrawal
-  request, and it neither reads nor writes the request journal, so an operational
-  alert can never look like a payout. Volume is bounded per subject, and per pass
-  for the conditions a reporting sweep produces - the freeze below is deliberately
-  outside that second bound, so a mass failure sends one message per frozen
-  request rather than hiding any of them behind a count. Delivery
-  happens outside every database transaction, and no operator-supplied
-  or error-derived text crosses to the messenger - the message says a reason
-  exists and where to read it. What is proven is the path up to the transport:
-  the bot's own configuration and the owner allow-list belong to the live phase,
-  and a command exists precisely so that delivery can be demonstrated there.
-- **The web side deliberately gets no messenger credential.** That was already
-  the architecture, and it is kept: web writes structured records instead, and
-  the phase publishes the catalogue of its critical identifiers as the selector
-  an infrastructure log relay reads. A test derives that catalogue from the
-  sources by parsing them, resolves identifiers declared as constants, and fails
-  closed on anything it cannot resolve - a text scan would have found twelve of
-  twenty. Acceptance of an actually-delivering relay belongs to the live phase.
-- **Recovery no longer trusts a node that says "found".** This is the
-  money-relevant change and the owner chose to make it now rather than defer it,
-  reasoning that the live phase must exercise the intended final semantics rather
-  than a knowingly weaker one. Before a withdrawal or an internal custody
-  operation may move to a state meaning the transaction was broadcast, the body
-  the node returned must prove it is the transaction the system intended to sign:
-  the identifier recomputed from the body, then the decoded contract against the
-  immutable intent. A refusal releases no hold, creates no broadcast evidence,
-  opens no rebuild and spends no repeat budget. There is deliberately no fallback
-  of "no body returned, so trust the identifier".
-- **That refusal would otherwise have been silent, so it raises its own alert.**
-  A request refused this way never rebuilds, never exhausts its budget and
-  therefore never reaches the one state the owner channel reports - while holding
-  a user's money. The asymmetry was visible inside the phase: the same refusal on
-  an internal operation was already reported. The money-holding case was the
-  quiet one.
-- **Its accepted price, worth knowing before the live phase:** a node that keeps
-  claiming it knows a transaction whose body cannot be verified leaves the
-  request frozen with the hold held, and the operator tool cannot land it. The
-  runbook names that cause, and the live phase is required to check the real
-  node's answer and correct the decoder to the observed wire format if it differs
-  - **without removing the verification**. Restoring trust-by-identifier is
-  explicitly not an option.
-- **Devices keep updating after the switch.** The binary-distribution route the
-  new API did not serve is ported with the frozen handler's eleven branches, its
-  own timestamp-and-signature scheme, and its version comparison taken from the
-  same library the old code used - which also closes a pre-release divergence an
-  earlier phase had recorded as preserved. Without it the switch would have left
-  the update prompt working and the download failing.
-- **Deployment templates exist, and a guard keeps them templates.** Reverse-proxy
-  configuration, service units and a relay unit ship with every host-specific
-  value externalized, and a structural guard fails the build on a host name, an
-  address, a credential or a migration-at-startup switch. The guard carries its
-  own 65-case self-test that runs on every invocation and asserts, besides the
-  right verdict, that no message repeats a planted value.
-- **Configuration and operability.** Both configuration examples were incomplete
-  enough that copying them produced a service that refuses to start; they are
-  fixed and pinned by tests. A build target writes the four executables. Command
-  line tools create the first administrator, purge expired sessions and purge
-  spent widget tokens.
-- **One deliberate improvement over the old behaviour, decided by the owner:**
-  spent widget tokens are deleted after a day, but the old proactive expiry
-  marking is not restored, because it would have turned the first read of an
-  expired token from a not-found answer into a server error. The table stops
-  growing, and one merchant-visible change comes with it deliberately: re-reading
-  an expired token used to give a server error forever, and after the purge it
-  gives not-found again. The old permanent server error is explicitly not
-  preserved as a compatibility requirement.
-- **No threshold was invented.** The alert threshold the sweep phase deferred
-  here is configurable and **inactive when unset**, because the owner's standing
-  rule is that thresholds arrive with measurements. Choosing it is the live
-  phase's work, and the runbook lists it as a switch-time precondition so it
-  cannot be forgotten.
-- **Current/next task:** `035-live-cutover-validation` is CLOSED. The next
-  planned phase is `016-legacy-removal`, and it has NOT STARTED: by owner
-  decision it never starts automatically, and it is not a production cutover.
-- **What still breaks at the switch, and it is now one thing rather than two.**
-  Device self-update is fixed here. The merchant dashboard statistics still go
-  blank - an exclusion the owner took earlier, because those figures came from a
-  withdrawal model that no longer exists - and the dead cards are removed with the
-  rest of the legacy tree by `016-legacy-removal`.
-- **One owner question is still open, and it is not this phase's.** A support
-  control whose save has no route for that role, and which is at the same time the
-  only way that role reaches a view it is deliberately allowed to see: keeping it
-  leaves a control that cannot work, removing it takes away a permitted read. It
-  was raised by the dead-surface phase and has not come back. It does not change
-  what happens at the switch.
+- **Its implementation:** head `bd99154`; `v2` run `35014753274`, **success**.
+- **Before that:** `015-cutover-dev-stand` — the repository half of the stand
+  cutover, split from the live half by owner decision so that repository checks
+  could accept it on their own: alert delivery on the custody side (nine
+  conditions, one owner channel, no operator text crossing to the messenger),
+  the device self-update route, deployment templates guarded against
+  host-specific values, configuration examples pinned by tests, the operator
+  command-line tools, and the rule that a node's "found" is never trusted
+  before a body has been verified against the signed intent. Head `caf80ad`
+  on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
+- **Current/next task:** `016-legacy-removal` is CLOSED, and with it the
+  financial-core redesign program's phase list. What follows are the separate
+  pre-production tasks listed at the end of this file (merchant API hardening,
+  Android secret cleanup, and the rest). NONE HAS STARTED: by owner decision
+  they are bounded tasks of their own, never started automatically, and none of
+  them is a production cutover.
+- **Nothing breaks at the switch any more.** Device self-update was fixed in the
+  cutover preparation; the merchant dashboard cards that could only go blank -
+  their figures came from a withdrawal model that no longer exists, an exclusion
+  the owner took earlier - were removed with the legacy tree. The support-role
+  question that stayed open after the dead-surface phase is closed by the owner
+  decision described above.
 - **The cutover that was validated is the development stand's, not production's.**
   Production has not been cut over, and nothing in this phase authorises it. The
   live run happened on a test network with test funds, on a disposable private
   stand, under an authorisation that explicitly excluded production, mainnet and
   production secrets.
-- **Next action:** none in flight. The next phase has not been started, and it
+- **Next action:** none in flight. The next task has not been started, and it
   does not start by itself.
 
 ### Phase boundaries deliberately held
@@ -221,11 +178,10 @@ disconnects.
 Structure exists in the baseline where behavior does not. A table being present
 is not evidence that its behavior is implemented.
 
-- **Nothing in the v2 core has been exercised against real infrastructure.** The deposit, sweep
-  and withdrawal paths are complete and covered by tests, but assembly, broadcast and the owner's
-  approval have never run against a live chain or a real bot, and the panel has never spoken to a
-  running v2 stand. This is now the explicit content of `035-live-cutover-validation`, and it is
-  why that phase exists: the repository half is finished and proves nothing about a live stand.
+- **The v2 core has been exercised against real infrastructure once, on a test network.** Until
+  the live cutover phase the deposit, sweep and withdrawal paths were covered by tests only; that
+  phase ran them on a live test-network stand with a real bot and a real owner approval. It proves
+  the development stand, not production: production has never run any of it.
 - **Relocating custody to cold storage is not built and is not a treasury withdrawal.** It is a
   different operation with a different accounting model; folding it into the treasury path would
   hide a second kind of money movement inside an existing one.
@@ -485,6 +441,14 @@ Completed architecture/specification milestones:
 
 ## Known traps
 
+- **The legacy backend is gone; read it from history, not from the tree.** Provenance
+  comments in `services/**`, the legacy rules document and older specifications cite
+  legacy files by path and line. Those resolve only at the parent of the commit that
+  deleted the legacy tree (`git log -1 --diff-filter=D -- backend` finds it). Do not
+  "fix" such a citation by pointing it at v2 code, and do not recreate a legacy file to
+  satisfy it. The recorded evidence under `docs/platform/` is the frozen copy the rule
+  identifiers and the SQL snapshot refer to; its line numbers are stable because the
+  files are.
 - **A service token that is a child of the bootstrap root token dies with it.**
   Revoking a bootstrap root token is ordinary hygiene, and it silently revoked a
   long-lived service credential that had been verified as *separate* — different
@@ -593,8 +557,9 @@ Completed architecture/specification milestones:
   runtime nicety.
 - Do not treat legacy balance mirrors or `transaction_queue` as an internal
   accounting system, and do not restore per-deal blockchain settlement.
-- Do not import from the frozen backend into v2 or expand a scaffolding phase
-  into later financial phases.
+- Do not reintroduce the removed legacy module path into v2 - the legacy backend
+  is gone from the repository and a guard refuses that import path - and do not
+  expand a scaffolding phase into later financial phases.
 - Do not release a withdrawal hold based on Web timeout, a cancellation request,
   or any nonterminal/unknown Crypto state.
 - Do not turn `WAITING_FOR_FUNDS` into delayed automatic execution.
@@ -689,8 +654,8 @@ Completed architecture/specification milestones:
   bank against it, and one of its flags decides whether a trader may create an SBP
   requisite, so an empty or invented catalogue changes what traders can do.
 - Configuration defaults are part of the ported behavior. The legacy backend
-  supplies built-in defaults for the Android release descriptor, so "unset" never
-  reaches its handler; an empty default in v2 would tell every current device that
+  (now removed from the repository) supplied built-in defaults for the Android
+  release descriptor, so "unset" never reaches its handler; an empty default in v2 would tell every current device that
   an update is available, with no version and no link. Where legacy has a default,
   carry it, and cite the line it came from.
 - Do not add a device-log table because the ingestion endpoint appears to need one:
@@ -929,9 +894,9 @@ Completed architecture/specification milestones:
   two comments claiming that were corrected in review because their own tests asserted
   the opposite.
 - Deposit addresses, ledger balances and the custody-status view now have HTTP routes and a
-  panel that consumes them; that boundary is closed. What remains is that nothing in the panel
-  has been exercised against a running stand, because the stand still serves the legacy backend
-  until the cutover phase.
+  panel that consumes them; that boundary is closed. The panel was exercised against the running
+  v2 stand in the live cutover phase; the legacy backend that the stand used to serve no longer
+  exists in the repository.
 - A test that renames a table away to simulate a failure is safe only because every
   fixture runs on its own ephemeral database that is dropped afterwards. Do not copy that
   pattern into a suite that shares one database.
