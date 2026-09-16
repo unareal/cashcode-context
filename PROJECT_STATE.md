@@ -23,7 +23,9 @@ structural guard keeps it out.
 
 Kept with cleanup: clients and non-financial product behavior, including auth,
 users and permissions, requisites and devices, disputes, merchant API and
-sandbox contracts, IPN, widget, fees, and exchange rates. Rewritten: backend
+sandbox contracts, IPN, widget, fees, and exchange rates - with the merchant
+API and IPN authentication envelopes since replaced by the pre-production
+hardening task, while their business payloads stayed as they were. Rewritten: backend
 wiring and transaction boundaries, the financial data model, deal lifecycle,
 ledger and holds, deposits, withdrawals, custody, and the financial UI. The
 legacy wallet, queue, batch, MultiSend and fragmented withdrawal mechanisms
@@ -74,7 +76,52 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed phase:** `016-legacy-removal` — the repository no longer carries the
+- **Completed task:** `036-merchant-api-hardening` — the first of the
+  pre-production tasks the master plan lists. The
+  merchant public API now has a single authentication scheme, the one the
+  platform will launch with, replacing the one carried over from the legacy
+  platform. Two behaviours are worth knowing before integrating against it: a
+  captured request re-sent unchanged is refused, and every authentication
+  failure answers one identical refusal, so the error text does not tell one
+  cause from another while debugging an integration. The old scheme is not kept as a compatibility mode: the owner
+  confirmed there is no integrated merchant estate that has to be preserved
+  byte-for-byte, and chose a clean contract over carrying the old one
+  indefinitely. An integration is built against the contract document, which
+  the task added to the private repository.
+- **What else that task closed.** A merchant credential can now be rotated and
+  revoked by an operator — rotation with a transition window, so changing a key
+  costs the merchant no downtime, and revocation taking effect at once. The
+  sandbox now has a credential of its own, issued to the merchant in the
+  panel, and sandbox calls are signed with it. Outgoing notifications are held
+  rather than discarded while a merchant has no usable credential, and they
+  carry an identifier stable across retries, so a merchant can tell a
+  redelivery from a new event. The platform refuses to deliver a notification
+  to an address inside its own network, on every hop. The surface has its own
+  request-size, idle and rate limits. A blocked merchant is now refused on
+  every merchant route; before, it was turned away only on deal creation, and
+  softly. The merchant settings routes are restricted to the merchant role, and
+  the shop identifier is fixed once a credential has been issued.
+- **One accepted architecture decision changed, deliberately and in writing.**
+  The earlier decision froze the merchant notification contract. Changing its
+  authentication envelope was therefore an owner decision, not an engineering
+  one; the owner took it before the first production deployment and required
+  that the decision record be updated rather than left contradicting the code.
+  The notification body and its business meaning are unchanged — only the
+  envelope that proves who sent it and which delivery it is.
+- **A test guard, and what it uncovered.** The integration tests used to skip
+  silently when CI ran without a database, so a lost setting would have
+  reported success while testing nothing. They now fail instead. Making that
+  true exposed four more tests that were skipping through a different door,
+  including the one that proves the two services will only talk to each other
+  over their protected channel.
+- **Documentation.** The merchant contract now has a document of its own, and
+  the merchant panel describes and reproduces only the current scheme.
+- **Implementation:** head `37abbde`, on top of `baa180e`; 87 files, 12877
+  insertions, 2100 deletions. The branch is clean and synchronized with its
+  remote.
+- **Remote verification:** `v2` run `35140516415`, **success** across all three
+  jobs (guards and contract, web, crypto).
+- **Previous phase:** `016-legacy-removal` — the repository no longer carries the
   legacy platform. The frozen legacy Go backend (289 files) is deleted, and so
   are the legacy how-to documents that described running it, the residual web
   client code with no working purpose after the switch (27 modules nothing
@@ -107,12 +154,9 @@ disconnects.
   out-of-tree source copy) are recorded in the phase specification and need
   their own authorisation before anyone removes them. Production and mainnet
   were not touched, and the phase authorises no production cutover.
-- **Implementation:** head `baa180e`, on top of `bd99154`; 357 files, 1528
-  insertions, 124409 deletions. The branch is clean and synchronized with its
-  remote.
-- **Remote verification:** `v2` run `35037785540`, **success** across all three
-  jobs (guards and contract, web, crypto).
-- **Previous phase:** `035-live-cutover-validation` — the live half of the stand
+  Its implementation was head `baa180e` on `bd99154`; 357 files, 1528
+  insertions, 124409 deletions; `v2` run `35037785540`, **success**.
+- **Before that:** `035-live-cutover-validation` — the live half of the stand
   cutover, and the first phase whose evidence is a real chain rather than a fake
   node. It is what makes "the new financial path is verified end to end" a
   statement about observation instead of about tests. Its acceptance set is 73
@@ -153,12 +197,13 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `016-legacy-removal` is CLOSED, and with it the
-  financial-core redesign program's phase list. What follows are the separate
-  pre-production tasks listed at the end of this file (merchant API hardening,
-  Android secret cleanup, and the rest). NONE HAS STARTED: by owner decision
-  they are bounded tasks of their own, never started automatically, and none of
-  them is a production cutover.
+- **Current/next task:** `036-merchant-api-hardening` is CLOSED. The
+  financial-core redesign program's phase list was already closed by
+  `016-legacy-removal`; what remains are the separate pre-production tasks
+  listed at the end of this file. The Android secret cleanup HAS NOT STARTED,
+  and neither has any other item there. By owner decision each is a bounded
+  task of its own, none starts automatically, and none of them is a production
+  deployment.
 - **Nothing breaks at the switch any more.** Device self-update was fixed in the
   cutover preparation; the merchant dashboard cards that could only go blank -
   their figures came from a withdrawal model that no longer exists, an exclusion
@@ -170,8 +215,10 @@ disconnects.
   live run happened on a test network with test funds, on a disposable private
   stand, under an authorisation that explicitly excluded production, mainnet and
   production secrets.
-- **Next action:** none in flight. The next task has not been started, and it
-  does not start by itself.
+- **Next action:** none in flight. The next pre-production task has not been
+  started, and it does not start by itself. PRODUCTION DEPLOYMENT HAS NOT
+  STARTED: nothing so far has touched production, its hosts, mainnet or
+  production secrets.
 
 ### Phase boundaries deliberately held
 
@@ -694,9 +741,11 @@ Completed architecture/specification milestones:
   rejected tier overlap, and one legacy error message on the bank-fee routes is
   unreachable because the comparison that would select it never matches. Both are
   carried deliberately. The merchant public API and the sandbox are registered on the
-  engine rather than under the panel's route group; moving them under it changes
-  observable behavior for live integrations, and middleware coverage for that surface
-  is a production-hardening item rather than a porting-phase change.
+  engine rather than under the panel's route group, so they do not inherit the panel's
+  middleware. That was a gap until the hardening task, which gave the surface its own
+  limits and controls instead of moving it under a group whose behavior it does not
+  want; the placement itself is unchanged and still has to be remembered when reading
+  the routing.
 
 - Phase 008 added the ledger, and its traps are mostly about how the rest of the
   system must call it. The ledger service is the only path that may **change** a
@@ -1027,12 +1076,9 @@ repository.
 
 ## Required before production
 
-These are outside the current financial-redesign scope but must not be
-forgotten:
+These are outside the financial-redesign scope but must not be forgotten. None
+of them has started, and none of them is a production deployment:
 
-- Review and harden merchant public API authentication, signatures, replay
-  protection, nonce/timestamp semantics, and compatibility/versioning without
-  casually breaking its wire contract.
 - Clean up Android secret handling and sensitive logging, remove unsafe
   fallback secret behavior and duplicated cryptographic logic, and add
   regression tests for critical notification/SMS parsing while preserving the
