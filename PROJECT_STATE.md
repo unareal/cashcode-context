@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-09-19
+Last updated: 2026-09-20
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -76,7 +76,44 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `037-android-preproduction-hardening` — the second of
+- **Completed task:** `039-device-diagnostics-and-operator-health` — the third
+  of the pre-production tasks. An operator can now read the state of a physical
+  handset from the panel instead of picking the phone up. The device sends a
+  periodic structured snapshot of itself - build, permissions and system
+  restrictions, connectivity, whether its long-lived components are alive, and
+  the health of the bank-notification pipeline - and the server, not the phone,
+  turns that into one verdict with enumerated reasons, each carrying an
+  explanation and what the operator should do about it. A phone that has quietly
+  stopped working is now distinguishable from one that simply had a quiet day:
+  the previous channel carried events only, so silence and health looked alike.
+  The snapshot carries no message content, no personal or payment data and no
+  secret, and that is structural rather than filtered - the store holds typed
+  values only, so a handset cannot put text of its own choosing into it. A guard
+  on the device side fails if a field is added without being declared, and a
+  test on the server side plants sensitive values and requires them not to
+  surface.
+  One verdict names the common case rather than a fault: a handset can be
+  entirely healthy and still be out of deal matching, because binding proves
+  identity while activation is a separate human act. The panel now offers that
+  activation after a successful binding, addressed to the device that was
+  actually bound, and never performs it on its own.
+  **Verified on the physical handset**, including the update landing in place
+  with the binding intact, the previous build still working against the new
+  server, system restrictions toggled and reflected, and the process killed to
+  show the durable counters survive it. What was checked through the reads the
+  panel consumes rather than through rendering is recorded as exactly that; the
+  project has no browser-level test capability and the record does not pretend
+  otherwise.
+  **One criterion is deliberately left open**: how power management behaves on
+  handsets from other manufacturers. That needs hardware this project does not
+  own, so it joins the external validation gate below as its third item and is
+  not counted as met on the strength of a single handset.
+- **Its implementation:** head `f395950`, on top of `a36de13`; 105 files; `v2`
+  run `35431798216` on that exact head, **success** across all three jobs. The
+  closeout that records the acceptance is `d2201a6`; it touches documentation
+  only, so no `v2` run exists for it and none is owed. The branch head is
+  `d2201a6` and is synchronized with its remote.
+- **Previously completed:** `037-android-preproduction-hardening` — the second of
   the pre-production tasks. The Android application no longer carries a shared
   enrollment secret: every phone now has an identity of its own that the server
   can verify and revoke individually, so compromising one handset no longer
@@ -138,14 +175,10 @@ disconnects.
   over their protected channel.
 - **Documentation.** The merchant contract now has a document of its own, and
   the merchant panel describes and reproduces only the current scheme.
-- **Implementation:** head `a36de13`, on top of `37abbde`; 128 files, 20771
-  insertions, 3218 deletions. The branch is clean and synchronized with its
-  remote.
-- **Remote verification:** `v2` run `35414081962` on that exact head,
-  **success**.
-- **The previous task's implementation:** head `37abbde`, on top of `baa180e`;
-  87 files, 12877 insertions, 2100 deletions; `v2` run `35140516415`,
-  **success** across all three jobs (guards and contract, web, crypto).
+- **`037`'s implementation:** head `a36de13`, on top of `37abbde`; 128 files;
+  `v2` run `35414081962` on that exact head, **success**. **`036`'s:** head
+  `37abbde`, on top of `baa180e`; 87 files; `v2` run `35140516415`, **success**
+  across all three jobs (guards and contract, web, crypto).
 - **Previous phase:** `016-legacy-removal` — the repository no longer carries the
   legacy platform. The frozen legacy Go backend (289 files) is deleted, and so
   are the legacy how-to documents that described running it, the residual web
@@ -222,14 +255,14 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `037-android-preproduction-hardening` is CLOSED, and so
-  is `036-merchant-api-hardening` before it. The financial-core redesign
-  program's phase list was already closed by `016-legacy-removal`; what remains
-  are the separate pre-production tasks listed at the end of this file. The
-  Android device diagnostics task HAS NOT STARTED, the notification-parser
-  corpus task HAS NOT STARTED, and neither has any other item there. By owner
-  decision each is a bounded task of its own, none starts automatically, and none
-  of them is a production deployment.
+- **Current/next task:** `039-device-diagnostics-and-operator-health` is CLOSED,
+  and so are `037-android-preproduction-hardening` and
+  `036-merchant-api-hardening` before it. The financial-core redesign program's
+  phase list was already closed by `016-legacy-removal`; what remains are the
+  separate pre-production tasks listed at the end of this file. The
+  notification-parser corpus task HAS NOT STARTED, and neither has any other
+  item there. By owner decision each is a bounded task of its own, none starts
+  automatically, and none of them is a production deployment.
 - **Nothing breaks at the switch any more.** Device self-update was fixed in the
   cutover preparation; the merchant dashboard cards that could only go blank -
   their figures came from a withdrawal model that no longer exists, an exclusion
@@ -241,11 +274,13 @@ disconnects.
   live run happened on a test network with test funds, on a disposable private
   stand, under an authorisation that explicitly excluded production, mainnet and
   production secrets.
-- **Next action:** no task in flight, but something is outstanding and it is
-  not optional. The mandatory external validation gate below has been written
-  down and agreed, and neither of its two checks has been run; production
-  readiness cannot be declared until both are. No further pre-production task
-  has been started, and none starts by itself. PRODUCTION DEPLOYMENT HAS NOT
+- **Next action:** no task in flight, and several things are outstanding that
+  are not optional. The mandatory external validation gate below now holds
+  three checks and none of them has been run; production readiness cannot be
+  declared until all three are. Five further items are recorded as mandatory
+  before production readiness, listed at the end of this file. No further
+  pre-production task has been started, and none starts by itself.
+  PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
   production secrets.
 
@@ -737,7 +772,8 @@ Completed architecture/specification milestones:
   an update is available, with no version and no link. Where legacy has a default,
   carry it, and cite the line it came from.
 - Do not add a device-log table because the ingestion endpoint appears to need one:
-  the bodies are deliberately not stored (see the checkpoint above).
+  the bodies are deliberately not stored. The device-health store added by
+  `039` is a different thing - typed health facts, never message bodies.
 
 - Phase 007 added its own carried quirks and traps. Money and rates cross the wire as
   **quoted JSON strings with trailing zeros trimmed**, so a stored `1000.00` is emitted
@@ -1109,28 +1145,44 @@ repository.
 ## Required before production
 
 These are outside the financial-redesign scope but must not be forgotten. None
-of them is a production deployment. None has been executed; the first of them
-has been written down and agreed as a mandatory gate, which is a different
-thing from having been run:
+of them is a production deployment. None has been executed; several are written
+down and agreed as mandatory, which is a different thing from having been run:
 
-- **A mandatory external validation gate, and it has not been run.** Two checks
-  cannot be performed without someone outside the project, and both are
-  blocking prerequisites for calling the platform production-ready. Deferring
-  them is not a pass, not a waiver and not an accepted risk. The first needs a
-  genuine bank notification to arrive on a bound handset, because only a real
-  message has the real format whose fields must be absent from logs and
-  diagnostics - inventing a plausible one would test an invented format. The
-  second needs a **second physical Android handset**: a backup taken from a
-  bound phone must be restored onto a different device and shown not to carry a
-  working identity across, so the second handset does not become a clone and
-  still requires a normal new binding. An attempt to avoid needing a second
-  handset, by restoring into a secondary profile of the same phone, is recorded
-  and failed outright - it restored nothing at all and therefore proved nothing.
+- **A mandatory external validation gate, and none of it has been run.** Three
+  checks cannot be performed without someone or something outside the project,
+  and all three are blocking prerequisites for calling the platform
+  production-ready. Deferring them is not a pass, not a waiver and not an
+  accepted risk. The first needs a genuine bank notification to arrive on a
+  bound handset, because only a real message has the real format whose fields
+  must be absent from logs and diagnostics - inventing a plausible one would
+  test an invented format. The second needs a **second physical Android
+  handset**: a backup taken from a bound phone must be restored onto a
+  different device and shown not to carry a working identity across, so the
+  second handset does not become a clone and still requires a normal new
+  binding. An attempt to avoid needing a second handset, by restoring into a
+  secondary profile of the same phone, is recorded and failed outright - it
+  restored nothing at all and therefore proved nothing. The third, added by the
+  device-health task, needs **handsets from other manufacturers**: power
+  management and background restriction are vendor-specific, the project owns
+  one handset, and what it reports says nothing about the rest.
 - Regression tests for notification and SMS parsing still need a corpus of
   **real, anonymised** bank messages from different banks and different
   wordings. Writing a plausible-looking corpus and presenting it as coverage is
   forbidden, so collecting the material is an external dependency of the same
   kind as the gate above. That task has not started.
+- **Five items the device-health task recorded as mandatory before production
+  readiness, none of them started.** A requisite an operator has blocked can
+  currently return to deal matching by a route that is not the operator's; the
+  gap is open, it is an availability-of-money question, and it is the owner's to
+  decide. Bank events have no durable delivery, so a queue with retries is owed,
+  and building one changes when a confirmation can arrive and what redelivery
+  the server must tolerate. Two questions about the lifetime of a device's
+  candidate key pair are carried over from the previous task and still need an
+  owner decision. One item is stand operations, tracked privately. And a handset
+  that went silent and returned stayed switched off with its requisites out of
+  deal matching, because nothing raises them automatically - why it fell silent
+  is not established, and it is now an investigation rather than an unexamined
+  risk. None of the five is an accepted risk or a waiver.
 - **Validate that a production configuration fails closed, and close the carried
   authorisation gaps.** Two related pieces of open technical debt, both inherited
   from the legacy platform rather than introduced by the rewrite. First, parts of
