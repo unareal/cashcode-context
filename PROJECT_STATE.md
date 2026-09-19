@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-09-16
+Last updated: 2026-09-19
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -76,8 +76,30 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `036-merchant-api-hardening` — the first of the
-  pre-production tasks the master plan lists. The
+- **Completed task:** `037-android-preproduction-hardening` — the second of
+  the pre-production tasks. The Android application no longer carries a shared
+  enrollment secret: every phone now has an identity of its own that the server
+  can verify and revoke individually, so compromising one handset no longer
+  says anything about any other. Binding a phone is an operator-issued one-time
+  code that the phone must answer with proof that it holds the private half of
+  the identity it presents; the code alone binds nothing. Revocation is a
+  durable fact kept separate from whether a device is merely switched off: no
+  automatic path sets or lifts it, and a revoked phone returns only through a
+  new binding. Repeated and replayed device requests are refused, the update
+  path refuses a release it cannot verify, cleartext traffic is confined to the
+  debug build type, and notification content no longer reaches logs or the
+  diagnostic channel.
+  The whole device lifecycle was exercised on a physical Android handset:
+  binding, an application update with the binding surviving it, revocation with
+  the phone erasing its own key and going silent, re-binding, and a real backup
+  run confirming the backup does not carry the credential store. The other half
+  of that check - restoring onto a different handset - is in the gate below and
+  has not been run.
+  Three follow-up items are recorded in the private repository. They concern
+  device key lifecycle and enrollment recovery, none of them blocks the closure
+  of this task, and two of the three need an owner decision before their
+  semantics can be settled.
+- **Previously completed:** `036-merchant-api-hardening`. The
   merchant public API now has a single authentication scheme, the one the
   platform will launch with, replacing the one carried over from the legacy
   platform. Two behaviours are worth knowing before integrating against it: a
@@ -116,11 +138,14 @@ disconnects.
   over their protected channel.
 - **Documentation.** The merchant contract now has a document of its own, and
   the merchant panel describes and reproduces only the current scheme.
-- **Implementation:** head `37abbde`, on top of `baa180e`; 87 files, 12877
-  insertions, 2100 deletions. The branch is clean and synchronized with its
+- **Implementation:** head `a36de13`, on top of `37abbde`; 128 files, 20771
+  insertions, 3218 deletions. The branch is clean and synchronized with its
   remote.
-- **Remote verification:** `v2` run `35140516415`, **success** across all three
-  jobs (guards and contract, web, crypto).
+- **Remote verification:** `v2` run `35414081962` on that exact head,
+  **success**.
+- **The previous task's implementation:** head `37abbde`, on top of `baa180e`;
+  87 files, 12877 insertions, 2100 deletions; `v2` run `35140516415`,
+  **success** across all three jobs (guards and contract, web, crypto).
 - **Previous phase:** `016-legacy-removal` — the repository no longer carries the
   legacy platform. The frozen legacy Go backend (289 files) is deleted, and so
   are the legacy how-to documents that described running it, the residual web
@@ -200,10 +225,11 @@ disconnects.
 - **Current/next task:** `036-merchant-api-hardening` is CLOSED. The
   financial-core redesign program's phase list was already closed by
   `016-legacy-removal`; what remains are the separate pre-production tasks
-  listed at the end of this file. The Android secret cleanup HAS NOT STARTED,
-  and neither has any other item there. By owner decision each is a bounded
-  task of its own, none starts automatically, and none of them is a production
-  deployment.
+  listed at the end of this file. `037-android-preproduction-hardening` is now
+  CLOSED as well; the Android device diagnostics task HAS NOT STARTED, the
+  notification-parser corpus task HAS NOT STARTED, and neither has any other
+  item there. By owner decision each is a bounded task of its own, none starts
+  automatically, and none of them is a production deployment.
 - **Nothing breaks at the switch any more.** Device self-update was fixed in the
   cutover preparation; the merchant dashboard cards that could only go blank -
   their figures came from a withdrawal model that no longer exists, an exclusion
@@ -215,8 +241,11 @@ disconnects.
   live run happened on a test network with test funds, on a disposable private
   stand, under an authorisation that explicitly excluded production, mainnet and
   production secrets.
-- **Next action:** none in flight. The next pre-production task has not been
-  started, and it does not start by itself. PRODUCTION DEPLOYMENT HAS NOT
+- **Next action:** no task in flight, but something is outstanding and it is
+  not optional. The mandatory external validation gate below has been written
+  down and agreed, and neither of its two checks has been run; production
+  readiness cannot be declared until both are. No further pre-production task
+  has been started, and none starts by itself. PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
   production secrets.
 
@@ -509,11 +538,14 @@ Completed architecture/specification milestones:
   stand, never in production, and the distinction has to be written down where
   the next reader will look rather than assumed.
 - **Compile-time configuration makes every environment a separate build.** The
-  device application carries its server address and its device secret as
-  constants with no runtime override, so an artifact built for one environment
-  cannot be pointed at another, and a build made for a test stand carries that
-  stand's secret inside it. Discovering this when the hardware arrives is
-  expensive; it is a property to check before a phase depends on it.
+  device application still takes its server address at build time, so an
+  artifact built for one environment cannot be pointed at another, and every
+  environment needs its own build. What changed is that the address now has no
+  built-in default at all: a build that does not supply it fails instead of
+  quietly pointing a phone somewhere. The shared secret that used to travel in
+  the artifact alongside it is gone. Discovering the per-environment build
+  property when the hardware arrives is expensive; it is a thing to check
+  before a phase depends on it.
 - **A negative observation without a positive control proves nothing.** "No
   alerts were delivered" and "the alerting is dead" look identical. Every
   selectivity check in this phase carries a deliberate positive delivery in the
@@ -689,9 +721,11 @@ Completed architecture/specification milestones:
 - Device authentication depends on a signature over the **original raw bytes of the
   request body**. Re-serializing or normalizing the JSON before verifying the
   signature - including verifying after a framework binding has already consumed and
-  re-encoded the body - is incompatible with the Android clients already paired in
-  the field, and must not be done without a separate, deliberate protocol migration.
-  It breaks every paired device while looking correct in review.
+  re-encoded the body - breaks device authentication while looking correct in
+  review, and must not be done without a separate, deliberate protocol migration.
+  The pre-production hardening task reset every existing pairing deliberately, so
+  the fleet is no longer a reason not to change this; the verification rule
+  itself is unchanged and still load-bearing.
 - Four of the notification statuses the SMS pipeline can produce are not values the
   status column accepts, so those rows are silently never stored. That is legacy
   behavior and is carried, which is only safe because the notification write is
@@ -1077,22 +1111,36 @@ repository.
 ## Required before production
 
 These are outside the financial-redesign scope but must not be forgotten. None
-of them has started, and none of them is a production deployment:
+of them is a production deployment. None has been executed; the first of them
+has been written down and agreed as a mandatory gate, which is a different
+thing from having been run:
 
-- Clean up Android secret handling and sensitive logging, remove unsafe
-  fallback secret behavior and duplicated cryptographic logic, and add
-  regression tests for critical notification/SMS parsing while preserving the
-  device API cryptographic contract. The live phase confirmed the concrete
-  shape: the application writes the activation payload and the device secret to
-  its debug log in plain text, and the network security configuration present in
-  the tree is not referenced from the manifest, so cleartext HTTP is permitted
-  to every host.
+- **A mandatory external validation gate, and it has not been run.** Two checks
+  cannot be performed without someone outside the project, and both are
+  blocking prerequisites for calling the platform production-ready. Deferring
+  them is not a pass, not a waiver and not an accepted risk. The first needs a
+  genuine bank notification to arrive on a bound handset, because only a real
+  message has the real format whose fields must be absent from logs and
+  diagnostics - inventing a plausible one would test an invented format. The
+  second needs a **second physical Android handset**: a backup taken from a
+  bound phone must be restored onto a different device and shown not to carry a
+  working identity across, so the second handset does not become a clone and
+  still requires a normal new binding. An attempt to avoid needing a second
+  handset, by restoring into a secondary profile of the same phone, is recorded
+  and failed outright - it restored nothing at all and therefore proved nothing.
+- Regression tests for notification and SMS parsing still need a corpus of
+  **real, anonymised** bank messages from different banks and different
+  wordings. Writing a plausible-looking corpus and presenting it as coverage is
+  forbidden, so collecting the material is an external dependency of the same
+  kind as the gate above. That task has not started.
 - Design how production unseals its secret store and where that material lives.
   It must not sit on the same host as the data it protects, which is what the
   disposable stand does deliberately and what production must not inherit.
-- Make the device application's server address and device secret configurable
-  without a rebuild, or accept that every environment needs its own signed
-  artifact carrying that environment's secret.
+- Decide whether the device application's server address must be changeable
+  without a rebuild, or accept that every environment keeps its own signed
+  artifact. The secret half of this item is gone: there is no longer an
+  environment secret inside the artifact to worry about, only the address, and
+  a build that does not supply one now fails rather than defaulting.
 - The residual false-positive class in the divergence alert: a ready command
   that a claim batch could not carry still raises a critical record every cycle
   until it is handed over. Invisible below the batch size, visible on a real
