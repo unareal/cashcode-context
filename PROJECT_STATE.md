@@ -200,7 +200,7 @@ disconnects.
   unknown — where recovery re-verified the body, broadcast nothing twice, and
   left exactly one transfer on the chain. The refusal paths were exercised too:
   an address outside the allow-list refused before the owner was ever asked, an
-  administrator login refused while the replay store was down, and the log relay
+  administrator login refused on an infrastructure failure path, and the log relay
   delivering exactly one of seventy-eight records.
 - **Four defects only a live run could find.** Two of them stopped deposits
   outright and neither was reachable by any test, because the fake node answers
@@ -222,14 +222,14 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `036-merchant-api-hardening` is CLOSED. The
-  financial-core redesign program's phase list was already closed by
-  `016-legacy-removal`; what remains are the separate pre-production tasks
-  listed at the end of this file. `037-android-preproduction-hardening` is now
-  CLOSED as well; the Android device diagnostics task HAS NOT STARTED, the
-  notification-parser corpus task HAS NOT STARTED, and neither has any other
-  item there. By owner decision each is a bounded task of its own, none starts
-  automatically, and none of them is a production deployment.
+- **Current/next task:** `037-android-preproduction-hardening` is CLOSED, and so
+  is `036-merchant-api-hardening` before it. The financial-core redesign
+  program's phase list was already closed by `016-legacy-removal`; what remains
+  are the separate pre-production tasks listed at the end of this file. The
+  Android device diagnostics task HAS NOT STARTED, the notification-parser
+  corpus task HAS NOT STARTED, and neither has any other item there. By owner
+  decision each is a bounded task of its own, none starts automatically, and none
+  of them is a production deployment.
 - **Nothing breaks at the switch any more.** Device self-update was fixed in the
   cutover preparation; the merchant dashboard cards that could only go blank -
   their figures came from a withdrawal model that no longer exists, an exclusion
@@ -448,7 +448,7 @@ Completed architecture/specification milestones:
   that is broken in the baseline and would have blocked the commit regardless of code quality; a
   structural guard that failed on correct code, making the phase's own gate unreachable; a single
   line of client configuration that satisfied every guard rule while sending the operator's token
-  to the public payment page; a migration that would have replaced a merchant's own API credentials
+  to a surface it must never reach; a migration that would have replaced a merchant's own API credentials
   with the panel session token; and a rationale that licensed dropping a merchant's request
   signature. After implementation the code reviews found a filter that returned an empty approval
   list while requests were waiting, a failed request that rendered as "nothing to approve", and a
@@ -599,20 +599,22 @@ Completed architecture/specification milestones:
   on one deal will fail for a reason the code does not explain. The rule the owner set: never
   drop a database invariant to preserve a fixture representing a state the invariant makes
   impossible.
-- **The body of a multipart upload is read inside an open database transaction**, bounded only
-  by a server-side deadline that the implementation makes injectable for tests. Remove or
-  lengthen that deadline and a slowly-sent request holds a pooled connection for as long as it
-  likes; the pool is small, so a handful of them stall every money path in the service.
-- **The scan that keeps uploads off the filesystem runs at review time, not in CI.** The
-  structural guards this project runs automatically do not include it, and the automated
-  temp-file test needs a database and therefore skips without one. Several other criteria of
-  the dispute phase - the single API client, the untouched earlier tests, the client-side
-  part order - are likewise verified by a reviewer running a pattern, not by a pipeline. Treat them as
-  standing obligations of whoever reviews next, not as things already guaranteed.
+- **The body of a multipart upload is read inside an open database transaction**, and a
+  server-side deadline on that read is load-bearing rather than defensive: without it, a
+  request that is slow to send holds a pooled database connection, and the pool is shared with
+  every money path in the service. The deadline is deliberately injectable so tests can prove
+  it, and weakening or removing it is a change that must be refused in review.
+- **Several criteria of the dispute phase are verified by a reviewer, not by the pipeline.**
+  Which ones, and how each is checked, is recorded in the private repository. The public point
+  is the standing obligation: they are commitments of whoever reviews next rather than
+  guarantees the build already enforces, and moving them into automation is open work.
 - **Evidence is never destroyed by an ordinary delete, and the sandbox's current answer is not
-  its contract.** Deleting a dispute document hides it everywhere, including from the
-  administrator judging the dispute, while the bytes and the history stay; physical destruction
-  would be a separate owner decision. The sandbox dispute route today answers "deal not found"
+  its contract.** An ordinary delete hides a dispute document from every role that can
+  see the dispute, the one adjudicating it included, while the bytes and the history
+  stay - so nothing is destroyed, but nothing is visible either. That is deliberate,
+  carried behaviour and it is **not** a resolved question: physical destruction, and
+  whether an adjudicator should keep seeing what a party removed, are separate owner
+  decisions that have not been taken. The sandbox dispute route today answers "deal not found"
   only because the sandbox holds no deal eligible for a dispute - that is the state of the
   sandbox, not the meaning of the endpoint.
 - On a surface whose fields come from optional joins, `null` already means "the joined row is
@@ -677,55 +679,50 @@ Completed architecture/specification milestones:
   defect-fix list covers only deals, requisites, the ledger and withdrawals.
 
 - Phase 006 added its own list of deliberately carried quirks, each pinned by a
-  test: several device-management
-  routes have no ownership check at all, so any authenticated user can cancel and
-  thereby delete another user's unbound device, read any requisite's notifications,
-  and rewrite the status of any notification, while a team lead can read a device
-  card outside their own referrals; a missing
-  device header answers 400 while a bad credential answers 401; the create and
-  rebind responses spell the QR field differently; validation tags on the requisite
-  create and update bodies are never evaluated, so almost nothing is validated at
-  bind time; the trader requisite list reports the page length where the admin list
-  reports a real count; and the SMS-Box slot lookup has no status filter, so a
-  blocked or pending requisite still matches. Removing any of them is a defect, not
-  a cleanup.
+  test. They span three kinds: **authorisation gaps inherited from the legacy
+  platform on some device and requisite routes**, input validation that is
+  weaker at bind time than the field definitions suggest, and cosmetic
+  inconsistencies in responses and counts. Each one is enumerated, with its
+  route and its effect, in the private specification; they are not restated here,
+  because a public list of where an ownership check is missing is a map rather
+  than a note. Two things matter publicly: **these are carried on purpose and
+  are open technical debt, not a solved problem**, and removing any of them
+  without the owner's decision is a defect rather than a cleanup. Closing them
+  is pre-production work and is listed as such at the end of this file.
 - The audit path never serializes a whole row. It writes an explicit allowlist
   of safe columns, and a test proves password hashes, MFA secrets and unconsumed
   invite codes never reach the audit table. Do not "simplify" it into a row
   dump, and do not add a read-back to make an audited value look tidier.
-- Web has no Telegram bot token by accepted architecture, so the alerts legacy
-  sent on account lockout and on a blocked administrator login have no transport
-  in v2. The controls themselves are preserved; only the notification is gone.
-- Redis must fail in two different directions, and the
-  difference is the point: an unconfigured client validates one-time codes
-  without replay protection, while a configured but failing one rejects them.
-  With it unreachable, no account with MFA can sign in - administrators
-  included - while the per-account lockout quietly stops applying, because it
-  fails open in the same situation. That is faithful to legacy and is an availability question for the
-  cutover, not a bug to paper over.
-- The administrator address allowlist is empty by default, and an empty
-  allowlist means the restriction is simply skipped, with nothing warning that
-  it is missing. Carrying the deployed list over is a precondition of the
-  cutover phase, not an optional step. When only per-login rules are used, a
-  login with no rule of its own is allowed through, so either every
-  administrator is listed or the global list is used - a non-empty global list
-  applies to everyone.
-- Removing the legacy request filter has consequences beyond the filter: request
-  bodies on registration and on the administrator routes are no longer bounded
-  by the application, passwords may now contain characters the filter rejected,
-  and its length limits counted bytes where the replacement validation counts
-  characters. With the IP-level protections gone, the `403 ip_blocked` and
-  `429 too_many_attempts` responses no longer exist on `/auth/*` either; the
-  per-account lockout and the route rate limiters remain.
+- Web deliberately holds no Telegram bot token by accepted architecture, so
+  some notifications the legacy platform sent on authentication events have no
+  transport in v2. The controls themselves are preserved; only the notification
+  is gone, and restoring that visibility is open work.
+- **Parts of the authentication hardening are configuration-sensitive, and that
+  is inherited rather than new.** Some of these controls depend on external
+  infrastructure and on deployment configuration being present, and the
+  behaviour when that configuration is absent is not uniformly the same as when
+  it is present and healthy. Which direction each one takes, and under what
+  conditions, is recorded in the private repository and is not published here.
+  What belongs in a restart checkpoint is the obligation: **a production
+  configuration must be validated to fail closed**, that validation is a
+  mandatory part of the pre-production work listed at the end of this file, and
+  it has not been done. Treating any of it as already safe because a stand
+  behaved well is the mistake this note exists to prevent.
+- Replacing the legacy request filter moved where input limits and character
+  rules are enforced, and the set of refusal responses on the authentication
+  routes changed with it. Per-account lockout and route rate limiting remain.
+  The exact before-and-after, and which limits now live where, is in the private
+  repository; the public point is that this boundary moved and must be
+  re-verified against a production configuration rather than assumed.
 
-- Device authentication depends on a signature over the **original raw bytes of the
-  request body**. Re-serializing or normalizing the JSON before verifying the
-  signature - including verifying after a framework binding has already consumed and
-  re-encoded the body - breaks device authentication while looking correct in
-  review, and must not be done without a separate, deliberate protocol migration.
-  The pre-production hardening task reset every existing pairing deliberately, so
-  the fleet is no longer a reason not to change this; the verification rule
-  itself is unchanged and still load-bearing.
+- Device authentication is sensitive to **how the request body is handled before it is
+  verified**. Re-serializing or normalizing it on the way in - including anywhere a
+  framework binding has already consumed and re-encoded it - breaks device
+  authentication while looking correct in review, and must not be done without a
+  separate, deliberate protocol migration. The pre-production hardening task reset
+  every existing pairing deliberately, so an installed fleet is no longer a reason
+  not to change this; the verification rule is unchanged, still load-bearing, and
+  recorded in the private repository.
 - Four of the notification statuses the SMS pipeline can produce are not values the
   status column accepts, so those rows are silently never stored. That is legacy
   behavior and is carried, which is only safe because the notification write is
@@ -872,15 +869,13 @@ Completed architecture/specification milestones:
   claims to hold.
 
 - Phase 010's traps are about a wire that is now frozen. **A refusal on this protocol
-  is permanent**: the sender retries the same message forever, so every validation rule
-  is also a way to stall the queue, with no operator notified anywhere. The settled
-  split is three-way, and review moved it twice before it was right: the envelope is
-  always checked; the payload of a **known** type is checked narrowly and forward-
-  compatibly - required fields only, unknown fields ignored - because a wrong amount on
-  a deposit event is money and must not be accepted with a log line; the payload of an
-  **unknown** type is not inspected at all. Labels are never checked against a closed
-  set, since the phase that owns the withdrawal state machine will mint labels this
-  phase has never seen.
+  is not a transient event**, so a validation rule added carelessly becomes an
+  availability problem rather than a rejected message, and the operational visibility
+  of that situation is itself open work. The settled split of what is validated, and
+  how strictly at each layer, is recorded in the private contract; review moved it
+  twice before it was right, and the principle that survived is that a wrong amount on
+  a money event must never be accepted with a log line, while forward compatibility is
+  preserved where it costs nothing.
 - An acknowledgement means **durably stored**, not applied. Anything that treats an
   ack as "handled" silently drops events now that an applier exists, and an event whose
   application is permanently impossible is still acknowledged on purpose, so the queue
@@ -900,15 +895,16 @@ Completed architecture/specification milestones:
 - Mutual TLS on the private listener has **no off switch by design**, so both
   long-running binaries refuse to start without certificate material, and the custody
   client's default endpoint is https. This is deliberate and the cutover phase owns
-  issuing the material; the administrative CLI keeps working without it, because
-  migrations must run before any of that exists. An environment-keyed bypass on a
-  custody boundary is the defect class this project has already been bitten by.
-- Three limits bind the phases that come next, and each is enforced by a refusal, which
-  on this wire means a permanent stall if the other side exceeds it: the pull loop may
-  not build an event batch larger than the frozen maximum, the reconcile request list
-  has its own cap, and the deposit-address command must derive its request id
-  deterministically from the trader, or a retry mints a second command and a second
-  address and breaks "one address per trader".
+  issuing the material. One administrative tool is outside that requirement for an
+  ordering reason recorded privately, and that exception is deliberate, narrow and
+  written down rather than discovered. An environment-keyed bypass on a custody
+  boundary is the defect class this project has already been bitten by.
+- Three limits bind the phases that come next, and each is enforced by a refusal on a
+  wire where a refusal is not transient, so exceeding one is an availability problem
+  rather than a rejected message. They are the event batch size, the reconcile request
+  list, and a deposit-address command whose request id must be derived deterministically
+  from the trader so that a retry cannot mint a second address. The values are in the
+  frozen contract in the private repository.
 - The two services are separate modules and a workspace file is forbidden, so **no
   single test can run both sides in one process**. Every cross-service test is one
   real side against a fake of the other; a test that appears to wire the two together
@@ -937,8 +933,10 @@ Completed architecture/specification milestones:
 - **A body may be replaced only after it can no longer be accepted** - its expiry plus
   the node timeout - and never while its outcome is still in flight. This is the rule
   that keeps two potentially valid payouts for one request from existing at once, and
-  the timeout that feeds it is ordinary configuration with no enforced relation to the
-  lifetime the node chooses, so raising it far enough reopens the window.
+  the timeout that feeds it is ordinary configuration, and nothing in the code ties it to
+  the lifetime it has to outlast. Validating that relationship against a production
+  configuration, rather than setting the two independently, is part of the
+  configuration review the pre-production work owes.
 
 - Phase 012's traps are about not losing money that is already on the chain. **A
   discovery source must declare its completeness.** The index either answers completely
@@ -949,10 +947,10 @@ Completed architecture/specification milestones:
   only thing that would ever notice is a balance check.
 - **Measure confirmation depth against the block the current receipt names**, and rewrite
   the stored block while the deposit is still unconfirmed. Freezing the block discovered
-  first credits a deposit early whenever a short reorg re-includes the transaction at a
-  higher block, at fewer than the accepted depth - and a short reorg never trips the
-  "transaction disappeared" condition, so nothing else catches it. The payout tracker
-  already had this right; the deposit path had to be brought into line with it.
+  first can credit a deposit before the accepted depth has actually been reached under
+  chain reorganisation, and the secondary control that catches a vanished transaction does
+  not cover that shape. The payout tracker already had this right; the deposit path had to
+  be brought into line with it, and the rule above is what keeps it right.
 - A deposit that was orphaned because the node could not find it is **not** terminal: a
   re-discovered transfer returns it to the unconfirmed state, and the return must refresh
   the block and recount the depth from scratch. Its uniqueness constraint blocks creating
@@ -1045,9 +1043,9 @@ Completed architecture/specification milestones:
   endpoint is reachable through the shared client today; check that again before routing a
   credential-checking call through it.
 - A public payment page is not the operator panel. Folding it into the panel's authenticated
-  client attaches an operator token to a request a paying customer's browser makes, and gives that
-  customer the panel's session-expiry redirect mid-payment. Express that boundary as a separate
-  component, not as a flag on a shared one.
+  client puts operator credentials and panel session behaviour on a surface built for a paying
+  customer's browser, which is a trust-boundary error rather than a styling one. Express that
+  boundary as a separate component, not as a flag on a shared one.
 
 ## AI development workflow
 
@@ -1133,6 +1131,17 @@ thing from having been run:
   wordings. Writing a plausible-looking corpus and presenting it as coverage is
   forbidden, so collecting the material is an external dependency of the same
   kind as the gate above. That task has not started.
+- **Validate that a production configuration fails closed, and close the carried
+  authorisation gaps.** Two related pieces of open technical debt, both inherited
+  from the legacy platform rather than introduced by the rewrite. First, parts of
+  the authentication hardening depend on external infrastructure and on deployment
+  configuration being present, and the behaviour when it is absent is not uniformly
+  the safe one; a production configuration must therefore be checked to fail closed
+  rather than assumed to, and a stand behaving well is not that check. Second, a set
+  of legacy authorisation and validation gaps on some device and requisite routes is
+  carried deliberately, pinned by tests, and still open; each is enumerated in the
+  private repository, and closing them is an owner decision rather than a cleanup
+  anyone may do in passing. Neither has been done.
 - Design how production unseals its secret store and where that material lives.
   It must not sit on the same host as the data it protects, which is what the
   disposable stand does deliberately and what production must not inherit.
