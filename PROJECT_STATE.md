@@ -76,43 +76,66 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `039-device-diagnostics-and-operator-health` — the third
-  of the pre-production tasks. An operator can now read the state of a physical
-  handset from the panel instead of picking the phone up. The device sends a
-  periodic structured snapshot of itself - build, permissions and system
-  restrictions, connectivity, whether its long-lived components are alive, and
-  the health of the bank-notification pipeline - and the server, not the phone,
-  turns that into one verdict with enumerated reasons, each carrying an
-  explanation and what the operator should do about it. A phone that has quietly
-  stopped working is now distinguishable from one that simply had a quiet day:
-  the previous channel carried events only, so silence and health looked alike.
-  The snapshot carries no message content, no personal or payment data and no
-  secret, and that is structural rather than filtered - the store holds typed
-  values only, so a handset cannot put text of its own choosing into it. A guard
-  on the device side fails if a field is added without being declared, and a
-  test on the server side plants sensitive values and requires them not to
-  surface.
+- **Completed task:** `040-requisite-block-bypass` — the fourth of the
+  pre-production tasks, and the one the previous task made mandatory. A blocked
+  requisite could be returned to deal matching without going through the
+  unblocking procedure. The previous task found one such route and recorded it
+  as a follow-up that was explicitly neither an accepted risk nor a waiver;
+  investigation found that it was not one route but a class, and that one member
+  of it was administrative rather than the trader's.
+  The fix is stated as a single invariant rather than as patches to the
+  individual routes: a requisite that carries a live block cannot be in service,
+  and it leaves the blocked state only through the operation that clears the
+  block. The rule is evaluated where the change is written, with the row held,
+  so a block arriving at the same moment cannot be overtaken. It covers the
+  automatic paths as well as the operator ones, which is what makes it a class
+  rule: a sequence of individually permitted steps does not add up to a way
+  around it.
+  Clearing a block is an administrator's act and lands the requisite short of
+  service, so returning it to work is two deliberate steps; the administrator's
+  reach was widened only to cover requisites left inconsistent by the old
+  behaviour. Closing a dispute never lifts a block when the requisite's own
+  owner initiated it. A requisite carrying a live block cannot be deleted, so
+  the record of why it was blocked cannot be discarded. An operator and the
+  trader both see why a requisite is blocked; the trader is told the reason and
+  the timing, not who acted or with what comment.
+  **Money behaviour is unchanged and was held to deliberately.** A deal already
+  under way still completes on every path it could before, and nothing about
+  balances, holds, limits or dispute settlement moved. The requisite-selection
+  rules and the database schema were not touched at all.
+  A one-off administrative command reconciles requisites the old behaviour left
+  inconsistent. It reports by default and changes nothing without being told to,
+  never clears a block, and never touches a deal. **It has not been run
+  anywhere**, and running it on the stand needs its own authorisation.
+  A structural check keeps the rule's single decision point from being bypassed
+  by future code. Two independent adversarial passes were run against that
+  check, by someone other than its author, and both found ways past it; all but
+  one were closed, and the one that remains needs a stronger form of analysis
+  than the check performs today. That limit is written down rather than papered
+  over: the check raises the cost of a future bypass, it does not prove the
+  absence of one. The rule itself is enforced where the change is written, and
+  that enforcement is not affected.
+- **Its implementation:** head `8b6cc7a`, on top of `d2201a6`; 25 files; `v2`
+  run `35514360889` on that exact head, **success** across all three jobs. The
+  closeout that records the acceptance is `f9180ed`; it touches documentation
+  only, so no `v2` run exists for it and none is owed. The branch head is
+  `f9180ed` and is synchronized with its remote.
+- **Previously completed:** `039-device-diagnostics-and-operator-health` — an
+  operator can read the state of a physical handset from the panel instead of
+  picking the phone up. The device sends a periodic structured snapshot of
+  itself and the server, not the phone, turns it into one verdict with
+  enumerated reasons, each carrying what the operator should do about it. A
+  phone that has quietly stopped working is now distinguishable from one that
+  simply had a quiet day. The snapshot carries no message content, no personal
+  or payment data and no secret, and that is structural rather than filtered.
   One verdict names the common case rather than a fault: a handset can be
   entirely healthy and still be out of deal matching, because binding proves
-  identity while activation is a separate human act. The panel now offers that
-  activation after a successful binding, addressed to the device that was
-  actually bound, and never performs it on its own.
-  **Verified on the physical handset**, including the update landing in place
-  with the binding intact, the previous build still working against the new
-  server, system restrictions toggled and reflected, and the process killed to
-  show the durable counters survive it. What was checked through the reads the
-  panel consumes rather than through rendering is recorded as exactly that; the
-  project has no browser-level test capability and the record does not pretend
-  otherwise.
-  **One criterion is deliberately left open**: how power management behaves on
-  handsets from other manufacturers. That needs hardware this project does not
-  own, so it joins the external validation gate below as its third item and is
-  not counted as met on the strength of a single handset.
-- **Its implementation:** head `f395950`, on top of `a36de13`; 105 files; `v2`
-  run `35431798216` on that exact head, **success** across all three jobs. The
-  closeout that records the acceptance is `d2201a6`; it touches documentation
-  only, so no `v2` run exists for it and none is owed. The branch head is
-  `d2201a6` and is synchronized with its remote.
+  identity while activation is a separate human act; the panel offers that
+  activation after a binding and never performs it on its own. Verified on the
+  physical handset. One criterion is deliberately left open — how power
+  management behaves on handsets from other manufacturers — and it joins the
+  external validation gate below as its third item. Head `f395950`, closeout
+  `d2201a6`; `v2` run `35431798216`, **success**.
 - **Previously completed:** `037-android-preproduction-hardening` — the second of
   the pre-production tasks. The Android application no longer carries a shared
   enrollment secret: every phone now has an identity of its own that the server
@@ -255,9 +278,10 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `039-device-diagnostics-and-operator-health` is CLOSED,
-  and so are `037-android-preproduction-hardening` and
-  `036-merchant-api-hardening` before it. The financial-core redesign program's
+- **Current/next task:** `040-requisite-block-bypass` is CLOSED, and so are
+  `039-device-diagnostics-and-operator-health`,
+  `037-android-preproduction-hardening` and `036-merchant-api-hardening`
+  before it. The financial-core redesign program's
   phase list was already closed by `016-legacy-removal`; what remains are the
   separate pre-production tasks listed at the end of this file. The
   notification-parser corpus task HAS NOT STARTED, and neither has any other
@@ -278,7 +302,8 @@ disconnects.
   are not optional. The mandatory external validation gate below now holds
   three checks and none of them has been run; production readiness cannot be
   declared until all three are. Five further items are recorded as mandatory
-  before production readiness, listed at the end of this file. No further
+  before production readiness, listed at the end of this file, plus two records
+  there that the owner deliberately did not declare mandatory. No further
   pre-production task has been started, and none starts by itself.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
@@ -1170,11 +1195,9 @@ down and agreed as mandatory, which is a different thing from having been run:
   wordings. Writing a plausible-looking corpus and presenting it as coverage is
   forbidden, so collecting the material is an external dependency of the same
   kind as the gate above. That task has not started.
-- **Five items the device-health task recorded as mandatory before production
-  readiness, none of them started.** A requisite an operator has blocked can
-  currently return to deal matching by a route that is not the operator's; the
-  gap is open, it is an availability-of-money question, and it is the owner's to
-  decide. Bank events have no durable delivery, so a queue with retries is owed,
+- **Four items the device-health task recorded as mandatory before production
+  readiness, none of them started.** Bank events have no durable delivery, so a
+  queue with retries is owed,
   and building one changes when a confirmation can arrive and what redelivery
   the server must tolerate. Two questions about the lifetime of a device's
   candidate key pair are carried over from the previous task and still need an
@@ -1194,6 +1217,26 @@ down and agreed as mandatory, which is a different thing from having been run:
   carried deliberately, pinned by tests, and still open; each is enumerated in the
   private repository, and closing them is an owner decision rather than a cleanup
   anyone may do in passing. Neither has been done.
+- **The web client's linter does not run at all, and must before production.**
+  It aborts while loading one of its own rules and therefore checks nothing;
+  the breakage predates the task that found it and was not caused by it. Fixing
+  it means moving dependency versions, which is its own risk and was
+  deliberately kept out of a task about blocking rules. Until it is fixed, no
+  linting result may be claimed for the web client — the type check and the
+  production build are what actually run there.
+- **Recorded, and deliberately NOT declared mandatory by the owner:** the
+  structural check that protects the blocking rule is a fence rather than a
+  proof. Two independent adversarial passes found ways past it; all but one were
+  closed, and the one that remains needs a stronger form of analysis than the
+  check performs today. The rule itself is enforced where the change is written
+  and that enforcement is not affected. It is written down so that the fence is
+  not mistaken for a proof by a later reader.
+- **Not an outstanding action but a known defect, recorded here because this is
+  where a fresh session looks:** an operator refused one of the now-forbidden
+  operations on a blocked requisite is shown the wording of a different refusal.
+  The refusal is correct and the rule holds; only the sentence is wrong. Making
+  the messages contextual is its own task, kept separate so that a text change
+  cannot disturb the rule. The owner did not declare it mandatory.
 - Design how production unseals its secret store and where that material lives.
   It must not sit on the same host as the data it protects, which is what the
   disposable stand does deliberately and what production must not inherit.
