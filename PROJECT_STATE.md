@@ -92,14 +92,18 @@ disconnects.
   Accepted residual risks stay open until the real corpus exists (gate item
   **G-4**): a real restriction worded ambiguously may now go unblocked, some
   false blocks remain, and risks tied to message sources are unchanged. They are
-  recorded privately. Nothing was deployed: the development stand and the
-  handset still run the previous behaviour, and delivering it needs a new
-  handset build under a separate authorisation.
+  recorded privately. Deployed to the development stand on 2026-09-22 under a
+  separate authorisation: the server moved with a stop window of about two
+  seconds, the handset was updated in place and kept its binding, and no
+  migration was needed. Money, statuses and the schema version were unchanged,
+  and the handset kept reporting normally. The classifier itself was not
+  exercised there: that needs real bank messages, which the stand does not
+  have, and creating payments to test it is not allowed.
 - **Its implementation:** head `e204fdd`; `v2` run `35711045969` on that exact
   head, **success** across all three jobs. The handset checks, which `v2` does
   not cover, passed locally: 258 unit tests with 0 failures and 2 skipped (two
   corpus modes that run only on request), and the debug build succeeds. The
-  closeout commit that follows touches documentation only.
+  closeout commits that follow touch documentation only.
 - **Previously completed:** `043-deal-attribution-ambiguity` — the part of the
   task proving which deal a bank payment belongs to that needed no real bank
   messages: one open deal of a given amount per handset, enforced by the
@@ -324,9 +328,7 @@ disconnects.
   production readiness, listed at the end of this file - among them proving which
   deal a bank payment belongs to - plus two records there that the owner
   deliberately did not declare mandatory. The payment-attribution task's
-  remainder cannot start before real bank messages exist. The block
-  classification change is committed but not yet deployed to the development
-  stand or the handset. No further
+  remainder cannot start before real bank messages exist. No further
   pre-production task has been started, and none starts by itself.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
