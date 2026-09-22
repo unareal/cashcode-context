@@ -76,34 +76,62 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `044-blocking-notice-classification` — bank notifications
-  that a parser wrongly read as a block of the payment details. A block takes a
-  handset's payment details out of deal matching, so a false one costs turnover.
-  By owner decision a notification now counts as a block only when it states
-  **unambiguously** that a card or an account is blocked or restricted now;
-  other notices that merely mention a block no longer block. Explicitly worded
-  blocks keep blocking. The same rule
-  applies in both parsers, the handset's and the SMS-box channel's. Unchanged by
-  owner decision: what a block covers, and how message senders are treated.
-  Criteria: 8 of 8 met by repository and local tests.
+- **Completed task:** `045-bank-source-and-name-catalogue` — how the platform
+  decides which source a bank event came from and which bank it names. The bank
+  name a notification carries is what the server compares with the payment
+  details, and it weighs heavily in whether a payment is accepted as confirming
+  a deal, yet nothing compared the three directories that produce that name with
+  the catalogue the payment details take their name from. Fixed in the
+  repository, all within the identifiers already listed:
+  - the handset's sender check and the naming of a sender's bank used
+    different, inconsistent rules, so part of the handset's own list was
+    unreachable and a real credit from some banks could never confirm anything.
+    Both now derive from one place and cannot disagree;
+  - recognising a sender and naming its bank were decided separately and could
+    name a bank other than the one that actually sent the money — a path to
+    confirming a deal that belongs to other payment details. That path is
+    closed in the repository;
+  - an application listed under two different banks no longer takes one of the
+    two names while its attribution is unproven; the notification is still
+    delivered, recorded and shown to the operator. This restriction lives in the
+    handset application only — it is not a server guarantee of the source, and
+    it is in effect nowhere until a separately authorised build is installed;
+  - one duplicated entry removed and two display names aligned to the
+    catalogue. Which bank a short code belongs to was **not** changed.
 
-  **This is not proof that false blocks are gone for real bank notifications.**
-  The corpus still holds **no real bank messages**; every test is engineered.
-  Accepted residual risks stay open until the real corpus exists (gate item
-  **G-4**): a real restriction worded ambiguously may now go unblocked, some
-  false blocks remain, and risks tied to message sources are unchanged. They are
-  recorded privately. Deployed to the development stand on 2026-09-22 under a
-  separate authorisation: the server moved with a stop window of about two
-  seconds, the handset was updated in place and kept its binding, and no
-  migration was needed. Money, statuses and the schema version were unchanged,
-  and the handset kept reporting normally. The classifier itself was not
-  exercised there: that needs real bank messages, which the stand does not
-  have, and creating payments to test it is not allowed.
-- **Its implementation:** head `e204fdd`; `v2` run `35711045969` on that exact
+  A structural check now compares all three directories with the catalogue on
+  every run and separates what must agree, what is a technical defect, and what
+  stays unverified. Criteria: 12 of 12 autonomous ones met by repository tests,
+  against engineered messages only.
+
+  **This does not establish that a sender or an application belongs to the bank
+  it is listed under, and it does not close the question of which applications
+  may be a source at all.** That question stays mandatory before production and
+  waits for the real corpus (gate item **G-4**). Five further criteria are
+  explicitly deferred to it: the attribution of two applications, of one more
+  entry, of every short code, the review of the list against the banks the first
+  users will actually use, and the confirmation that the restriction above
+  actually takes effect on the handset. Tightening the sender check also cost
+  the automatic recognition of some legitimate sender spellings — an accepted,
+  recorded loss in the safe direction: the error is a payment not confirmed,
+  never a payment wrongly confirmed. Which spellings are affected is recorded
+  privately, and the risk stays open until the real corpus. Nothing was
+  deployed: the stand and the handset still run the previous behaviour.
+- **Its implementation:** head `ffbddf4`; `v2` run `35776873900` on that exact
   head, **success** across all three jobs. The handset checks, which `v2` does
-  not cover, passed locally: 258 unit tests with 0 failures and 2 skipped (two
-  corpus modes that run only on request), and the debug build succeeds. The
-  closeout commits that follow touch documentation only.
+  not cover, passed locally: 270 unit tests with 0 failures and 2 skipped, and
+  the debug build succeeds. The closeout commit that follows touches
+  documentation only.
+- **Previously completed:** `044-blocking-notice-classification` — bank
+  notifications that a parser wrongly read as a block of the payment details. A
+  notification now counts as a block only when it states unambiguously that a
+  card or an account is blocked or restricted now; other notices that merely
+  mention a block no longer block, and explicitly worded blocks keep blocking.
+  The same rule applies in both parsers. 8 of 8 criteria met; deployed to the
+  development stand on 2026-09-22 with the handset updated in place. **Not
+  proof that false blocks are gone for real bank notifications**: the corpus
+  holds no real bank message, and its residual risks stay open until **G-4**.
+  Head `e204fdd`, `v2` run `35711045969`, **success**.
 - **Previously completed:** `043-deal-attribution-ambiguity` — the part of the
   task proving which deal a bank payment belongs to that needed no real bank
   messages: one open deal of a given amount per handset, enforced by the
@@ -297,8 +325,9 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `044-blocking-notice-classification` is CLOSED, and so
-  are `043-deal-attribution-ambiguity`, `042-bank-message-corpus` (technical
+- **Current/next task:** `045-bank-source-and-name-catalogue` is CLOSED in its
+  autonomous part, and so are `044-blocking-notice-classification`,
+  `043-deal-attribution-ambiguity`, `042-bank-message-corpus` (technical
   part), `041-bank-event-durable-delivery`,
   `040-requisite-block-bypass`, `039-device-diagnostics-and-operator-health`,
   `037-android-preproduction-hardening` and `036-merchant-api-hardening`
@@ -328,7 +357,9 @@ disconnects.
   production readiness, listed at the end of this file - among them proving which
   deal a bank payment belongs to - plus two records there that the owner
   deliberately did not declare mandatory. The payment-attribution task's
-  remainder cannot start before real bank messages exist. No further
+  remainder cannot start before real bank messages exist. The source-and-name
+  work is committed but not deployed to the development stand or to the
+  handset. No further
   pre-production task has been started, and none starts by itself.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
@@ -1229,10 +1260,11 @@ down and agreed as mandatory, which is a different thing from having been run:
   the parsers classify messages and read their fields, and inconsistencies in
   how sources and banks are named; they are **recorded privately as mandatory
   items before production readiness**, some of them folded into the matching
-  task below. One of them — notifications wrongly classified as a block — was
-  addressed in code by `044`, and only against engineered messages; its
-  residual risks are accepted until the real corpus. The others have not been
-  fixed, and none of them is an accepted risk.
+  task below. Two of them — notifications wrongly read as a block, and the way
+  a source and a bank name are decided — were addressed in code by `044` and
+  `045`, in both cases only against engineered messages; their residual risks
+  are accepted until the real corpus. The others have not been fixed, and none
+  of them is an accepted risk.
 - **Proving which deal a bank payment belongs to — mandatory, partly done.**
   Durable delivery made one delivered event settle at most once; it did not, and
   was never meant to, establish that a given payment was made for a given deal.
