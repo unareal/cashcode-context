@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-09-20
+Last updated: 2026-09-22
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -76,52 +76,41 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `041-bank-event-durable-delivery` — the fifth of the
-  pre-production tasks, and one the device-health task made mandatory. A bank
-  notification observed on the handset used to exist only for the length of one
-  request: a failed send lost the payment, and a repeated send of the same event
-  could have been acted on twice. Those two are closed. They are not the whole
-  of the money risk in matching bank events to deals, which stays open and is
-  described under the mandatory items at the end of this file.
-  On the handset, an observed bank event is kept in an encrypted, durable local
-  queue until the server has decided it, and survives the application being
-  killed, a reboot and a loss of network. It is never kept in plain text, and a
-  row is removed only by the server's answer. What it cannot do is outlive its
-  binding: ending the binding ends the queue, deliberately, with the loss
-  counted.
-  On the server, every event is recorded under its own identity before anything
-  is decided about it, and the decision is written in the same transaction as
-  any money it moves, so one event causes at most one settlement. A repeat is
-  answered from the record rather than decided again.
-  **Automatic confirmation is refused rather than guessed** in the cases this
-  task recognises as unsafe; such an event is recorded and shown to an operator
-  instead of confirming anything. That is a narrowing of the risk, not a proof
-  that matching is safe. A refusal of automatic confirmation
-  is kept distinct from a failure of delivery, and both are counted.
-  Operators now see, per device, how many events are waiting, how old the oldest
-  one is, how long delivery takes, what was lost and why, and which events the
-  handset itself flagged as possibly already delivered.
-  **Money behaviour otherwise unchanged:** nothing about balances, holds,
-  limits, fees or dispute settlement moved, and the separate SMS-box channel was
-  deliberately left as it was.
-  **Live-validated** on the development stand and the project's physical
-  handset: all 64 acceptance criteria were verified in fact, five of them only
-  possible on hardware. That includes one synthetic payment taken end to end
-  from the handset to a confirmed deal, and the same event delivered again
-  settling nothing. The upgrade itself needed an ordered procedure, because the
-  new and old components are incompatible in both directions; it was written
-  and reviewed before it was authorised.
-  **This is the acceptance of one task, not production readiness.** Proving
-  which deal a given bank payment belongs to is a separate, mandatory task that
-  this one deliberately did not attempt, and the external validation gate below
-  is untouched by it.
-- **Its implementation:** head `b5b1c5c`; `v2` run `35646229651` on that exact
-  head, **success** across all three jobs. The later commits of the task - the
-  handset tests, the upgrade procedure, the live-validation record and the
-  closeout - touch only the Android tree and documentation, which the `v2`
-  workflow does not cover; nothing it gates on has changed since that run, so no
-  further run exists and none is owed. The branch head is `e9f9f10` and is
-  synchronized with its remote.
+- **Completed task:** `042-bank-message-corpus` — the technical part of the
+  parser-corpus task, and **only** that part. The project holds **no real bank
+  message at all**, so this task built what a real corpus will need instead of
+  pretending to have one: one corpus format, in which every sample must declare
+  whether it is real, engineered or of unknown origin, and two test harnesses
+  that run every sample through the actual parsers of both channels - the
+  handset's and the SMS-box's. Each sample keeps what the code answers today
+  apart from what the message actually means, and every disagreement between
+  the two is recorded rather than hidden or "fixed" into agreement. Checks
+  enforce the structure, the origin classes and an anonymisation safety net,
+  and no test failure ever prints message content.
+  **What it holds:** 43 engineered samples and 10 of unknown origin; **real
+  samples: 0**. The engineered run recorded parser defects, kept as findings
+  and not fixed, because changing what a parser answers changes which events
+  can confirm deals. **A green run proves that the code still answers what is
+  recorded; it proves nothing about how a real bank writes, and no parser is
+  declared validated by it.**
+  Collecting the real anonymised corpus is now item **G-4** of the external
+  validation gate, and the task's criteria that need it stay owner-deferred.
+  No production behaviour changed.
+- **Its implementation:** head `e71c1c1`; `v2` run `35679026299` on that exact
+  head, **success** across all three jobs. The closeout commit that follows it
+  touches documentation only, which the workflow does not cover. The branch
+  head is `73849a5` and is synchronized with its remote.
+- **Previously completed:** `041-bank-event-durable-delivery` — an observed bank
+  event now survives on the handset in an encrypted durable queue until the
+  server has decided it, or until the binding ends, which discards it with the
+  loss counted; the server records each event under its own
+  identity before deciding, in the same transaction as any money it moves, so
+  one delivered event settles at most once. These guarantees cover the handset
+  channel only; the separate SMS-box channel was deliberately left unchanged,
+  and money rules were otherwise unchanged. Automatic confirmation is refused in
+  the cases that task recognised as unsafe; that narrows the matching risk and
+  does not remove it. Live-validated on the development stand and the physical
+  handset, 64 of 64. Head `b5b1c5c`, `v2` run `35646229651`, **success**.
 - **Previously completed:** `040-requisite-block-bypass` — a blocked requisite
   could be returned to deal matching without the unblocking procedure; it was a
   class rather than one route, and is now closed by a single invariant evaluated
@@ -287,14 +276,16 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `041-bank-event-durable-delivery` is CLOSED, and so are
+- **Current/next task:** `042-bank-message-corpus` is CLOSED for its technical
+  part, and so are `041-bank-event-durable-delivery`,
   `040-requisite-block-bypass`, `039-device-diagnostics-and-operator-health`,
   `037-android-preproduction-hardening` and `036-merchant-api-hardening`
   before it. The financial-core redesign program's
   phase list was already closed by `016-legacy-removal`; what remains are the
-  separate pre-production tasks listed at the end of this file. The
-  notification-parser corpus task HAS NOT STARTED, and neither has any other
-  item there. By owner decision each is a bounded task of its own, none starts
+  separate pre-production tasks listed at the end of this file. The real
+  parser corpus waits for the external gate, and the task proving which deal a
+  bank payment belongs to HAS NOT STARTED, and neither has any other item
+  there. By owner decision each is a bounded task of its own, none starts
   automatically, and none of them is a production deployment.
 - **Nothing breaks at the switch any more.** Device self-update was fixed in the
   cutover preparation; the merchant dashboard cards that could only go blank -
@@ -309,8 +300,8 @@ disconnects.
   production secrets.
 - **Next action:** no task in flight, and several things are outstanding that
   are not optional. The mandatory external validation gate below now holds
-  three checks and none of them has been run; production readiness cannot be
-  declared until all three are. Further items are recorded as mandatory before
+  four checks and none of them has been run; production readiness cannot be
+  declared until all four are. Further items are recorded as mandatory before
   production readiness, listed at the end of this file - among them proving which
   deal a bank payment belongs to - plus two records there that the owner
   deliberately did not declare mandatory. No further
@@ -1183,9 +1174,9 @@ These are outside the financial-redesign scope but must not be forgotten. None
 of them is a production deployment. None has been executed; several are written
 down and agreed as mandatory, which is a different thing from having been run:
 
-- **A mandatory external validation gate, and none of it has been run.** Three
+- **A mandatory external validation gate, and none of it has been run.** Four
   checks cannot be performed without someone or something outside the project,
-  and all three are blocking prerequisites for calling the platform
+  and all four are blocking prerequisites for calling the platform
   production-ready. Deferring them is not a pass, not a waiver and not an
   accepted risk. The first needs a genuine bank notification to arrive on a
   bound handset, because only a real message has the real format whose fields
@@ -1199,12 +1190,22 @@ down and agreed as mandatory, which is a different thing from having been run:
   restored nothing at all and therefore proved nothing. The third, added by the
   device-health task, needs **handsets from other manufacturers**: power
   management and background restriction are vendor-specific, the project owns
-  one handset, and what it reports says nothing about the rest.
-- Regression tests for notification and SMS parsing still need a corpus of
-  **real, anonymised** bank messages from different banks and different
-  wordings. Writing a plausible-looking corpus and presenting it as coverage is
-  forbidden, so collecting the material is an external dependency of the same
-  kind as the gate above. That task has not started.
+  one handset, and what it reports says nothing about the rest. The fourth,
+  added by the parser-corpus task, needs **real, anonymised bank messages** from
+  the banks and channels that will actually be used: the test harnesses exist,
+  but the corpus they would validate does not. How the messages are obtained,
+  who may see them before anonymisation and how the originals are kept, which
+  banks are needed and how many samples are enough are owner decisions taken
+  before that session, not now.
+- **Parser regression tests: infrastructure done, real corpus absent.** Both
+  parsers are now under test against a shared corpus, but every sample in it
+  is engineered or of unknown origin; **real samples: 0**. Writing a
+  plausible-looking corpus and presenting it as coverage stays forbidden, and
+  no parser is declared validated. The engineered run recorded defects in how
+  the parsers classify messages and read their fields, and inconsistencies in
+  how sources and banks are named; they are **recorded privately as mandatory
+  items before production readiness**, some of them folded into the matching
+  task below. None of them has been fixed, and none is an accepted risk.
 - **Proving which deal a bank payment belongs to — mandatory, not started.**
   Durable delivery made one delivered event settle at most once; it did not, and
   was never meant to, establish that a given payment was made for a given deal.
@@ -1212,7 +1213,8 @@ down and agreed as mandatory, which is a different thing from having been run:
   a payment confirming a deal it was not made for, and of one payment being
   settled more than once; they are recorded privately, and they arise in cases
   the current rules do not recognise, so refusing the recognised ones does not
-  cover them. This task must close them before production readiness can be
+  cover them. The parser-corpus task added inputs to it and did not start
+  it. This task must close them before production readiness can be
   declared. It must rest on real anonymised bank messages rather than invented
   ones, and those messages are an input to it, not its solution: if they carry
   no reliable identifier of the operation, the matching model itself needs a
