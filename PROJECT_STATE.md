@@ -76,50 +76,59 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `040-requisite-block-bypass` — the fourth of the
-  pre-production tasks, and the one the previous task made mandatory. A blocked
-  requisite could be returned to deal matching without going through the
-  unblocking procedure. The previous task found one such route and recorded it
-  as a follow-up that was explicitly neither an accepted risk nor a waiver;
-  investigation found that it was not one route but a class, and that one member
-  of it was administrative rather than the trader's.
-  The fix is stated as a single invariant rather than as patches to the
-  individual routes: a requisite that carries a live block cannot be in service,
-  and it leaves the blocked state only through the operation that clears the
-  block. The rule is evaluated where the change is written, with the row held,
-  so a block arriving at the same moment cannot be overtaken. It covers the
-  automatic paths as well as the operator ones, which is what makes it a class
-  rule: a sequence of individually permitted steps does not add up to a way
-  around it.
-  Clearing a block is an administrator's act and lands the requisite short of
-  service, so returning it to work is two deliberate steps; the administrator's
-  reach was widened only to cover requisites left inconsistent by the old
-  behaviour. Closing a dispute never lifts a block when the requisite's own
-  owner initiated it. A requisite carrying a live block cannot be deleted, so
-  the record of why it was blocked cannot be discarded. An operator and the
-  trader both see why a requisite is blocked; the trader is told the reason and
-  the timing, not who acted or with what comment.
-  **Money behaviour is unchanged and was held to deliberately.** A deal already
-  under way still completes on every path it could before, and nothing about
-  balances, holds, limits or dispute settlement moved. The requisite-selection
-  rules and the database schema were not touched at all.
-  A one-off administrative command reconciles requisites the old behaviour left
-  inconsistent. It reports by default and changes nothing without being told to,
-  never clears a block, and never touches a deal. **It has not been run
-  anywhere**, and running it on the stand needs its own authorisation.
-  A structural check keeps the rule's single decision point from being bypassed
-  by future code. Two independent adversarial passes were run against that
-  check, by someone other than its author, and both found ways past it; all but
-  one were closed, and the one that remains needs a stronger form of analysis
-  than the check performs today. That limit is written down rather than papered
-  over: the check raises the cost of a future bypass, it does not prove the
-  absence of one. The rule itself is enforced where the change is written, and
-  that enforcement is not affected.
-- **Its implementation:** head `8b6cc7a`, on top of `d2201a6`; 25 files; `v2`
-  run `35514360889` on that exact head, **success** across all three jobs. The
-  closeout that records the acceptance is `f9180ed`; it touches documentation
-  only, so no `v2` run exists for it and none is owed. The branch head is
-  `f9180ed` and is synchronized with its remote.
+- **Completed task:** `041-bank-event-durable-delivery` — the fifth of the
+  pre-production tasks, and one the device-health task made mandatory. A bank
+  notification observed on the handset used to exist only for the length of one
+  request: a failed send lost the payment, and a repeated send of the same event
+  could have been acted on twice. Those two are closed. They are not the whole
+  of the money risk in matching bank events to deals, which stays open and is
+  described under the mandatory items at the end of this file.
+  On the handset, an observed bank event is kept in an encrypted, durable local
+  queue until the server has decided it, and survives the application being
+  killed, a reboot and a loss of network. It is never kept in plain text, and a
+  row is removed only by the server's answer. What it cannot do is outlive its
+  binding: ending the binding ends the queue, deliberately, with the loss
+  counted.
+  On the server, every event is recorded under its own identity before anything
+  is decided about it, and the decision is written in the same transaction as
+  any money it moves, so one event causes at most one settlement. A repeat is
+  answered from the record rather than decided again.
+  **Automatic confirmation is refused rather than guessed** in the cases this
+  task recognises as unsafe; such an event is recorded and shown to an operator
+  instead of confirming anything. That is a narrowing of the risk, not a proof
+  that matching is safe. A refusal of automatic confirmation
+  is kept distinct from a failure of delivery, and both are counted.
+  Operators now see, per device, how many events are waiting, how old the oldest
+  one is, how long delivery takes, what was lost and why, and which events the
+  handset itself flagged as possibly already delivered.
+  **Money behaviour otherwise unchanged:** nothing about balances, holds,
+  limits, fees or dispute settlement moved, and the separate SMS-box channel was
+  deliberately left as it was.
+  **Live-validated** on the development stand and the project's physical
+  handset: all 64 acceptance criteria were verified in fact, five of them only
+  possible on hardware. That includes one synthetic payment taken end to end
+  from the handset to a confirmed deal, and the same event delivered again
+  settling nothing. The upgrade itself needed an ordered procedure, because the
+  new and old components are incompatible in both directions; it was written
+  and reviewed before it was authorised.
+  **This is the acceptance of one task, not production readiness.** Proving
+  which deal a given bank payment belongs to is a separate, mandatory task that
+  this one deliberately did not attempt, and the external validation gate below
+  is untouched by it.
+- **Its implementation:** head `b5b1c5c`; `v2` run `35646229651` on that exact
+  head, **success** across all three jobs. The later commits of the task - the
+  handset tests, the upgrade procedure, the live-validation record and the
+  closeout - touch only the Android tree and documentation, which the `v2`
+  workflow does not cover; nothing it gates on has changed since that run, so no
+  further run exists and none is owed. The branch head is `e9f9f10` and is
+  synchronized with its remote.
+- **Previously completed:** `040-requisite-block-bypass` — a blocked requisite
+  could be returned to deal matching without the unblocking procedure; it was a
+  class rather than one route, and is now closed by a single invariant evaluated
+  where the change is written. Money behaviour was held unchanged. A structural
+  check guards the rule's decision point; it raises the cost of a future bypass
+  and is recorded as a fence, not a proof. Head `8b6cc7a`, `v2` run
+  `35514360889`, **success**.
 - **Previously completed:** `039-device-diagnostics-and-operator-health` — an
   operator can read the state of a physical handset from the panel instead of
   picking the phone up. The device sends a periodic structured snapshot of
@@ -278,8 +287,8 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `040-requisite-block-bypass` is CLOSED, and so are
-  `039-device-diagnostics-and-operator-health`,
+- **Current/next task:** `041-bank-event-durable-delivery` is CLOSED, and so are
+  `040-requisite-block-bypass`, `039-device-diagnostics-and-operator-health`,
   `037-android-preproduction-hardening` and `036-merchant-api-hardening`
   before it. The financial-core redesign program's
   phase list was already closed by `016-legacy-removal`; what remains are the
@@ -301,9 +310,10 @@ disconnects.
 - **Next action:** no task in flight, and several things are outstanding that
   are not optional. The mandatory external validation gate below now holds
   three checks and none of them has been run; production readiness cannot be
-  declared until all three are. Five further items are recorded as mandatory
-  before production readiness, listed at the end of this file, plus two records
-  there that the owner deliberately did not declare mandatory. No further
+  declared until all three are. Further items are recorded as mandatory before
+  production readiness, listed at the end of this file - among them proving which
+  deal a bank payment belongs to - plus two records there that the owner
+  deliberately did not declare mandatory. No further
   pre-production task has been started, and none starts by itself.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
@@ -1195,17 +1205,27 @@ down and agreed as mandatory, which is a different thing from having been run:
   wordings. Writing a plausible-looking corpus and presenting it as coverage is
   forbidden, so collecting the material is an external dependency of the same
   kind as the gate above. That task has not started.
-- **Four items the device-health task recorded as mandatory before production
-  readiness, none of them started.** Bank events have no durable delivery, so a
-  queue with retries is owed,
-  and building one changes when a confirmation can arrive and what redelivery
-  the server must tolerate. Two questions about the lifetime of a device's
-  candidate key pair are carried over from the previous task and still need an
-  owner decision. One item is stand operations, tracked privately. And a handset
-  that went silent and returned stayed switched off with its requisites out of
-  deal matching, because nothing raises them automatically - why it fell silent
-  is not established, and it is now an investigation rather than an unexamined
-  risk. None of the five is an accepted risk or a waiver.
+- **Proving which deal a bank payment belongs to — mandatory, not started.**
+  Durable delivery made one delivered event settle at most once; it did not, and
+  was never meant to, establish that a given payment was made for a given deal.
+  **The existing matching is not declared safe.** Residual risks remain open of
+  a payment confirming a deal it was not made for, and of one payment being
+  settled more than once; they are recorded privately, and they arise in cases
+  the current rules do not recognise, so refusing the recognised ones does not
+  cover them. This task must close them before production readiness can be
+  declared. It must rest on real anonymised bank messages rather than invented
+  ones, and those messages are an input to it, not its solution: if they carry
+  no reliable identifier of the operation, the matching model itself needs a
+  separate owner decision.
+- **Three items the device-health task recorded as mandatory before production
+  readiness, none of them started** (its fourth, durable delivery of bank
+  events, is done). Two questions about the lifetime of a device's candidate
+  key pair are carried over from an earlier task and still need an owner
+  decision. One item is stand operations, tracked privately. And a handset that
+  went silent and returned stayed switched off with its requisites out of deal
+  matching, because nothing raises them automatically - why it fell silent is
+  not established, and it is an investigation rather than an unexamined risk.
+  None of them is an accepted risk or a waiver.
 - **Validate that a production configuration fails closed, and close the carried
   authorisation gaps.** Two related pieces of open technical debt, both inherited
   from the legacy platform rather than introduced by the rewrite. First, parts of
