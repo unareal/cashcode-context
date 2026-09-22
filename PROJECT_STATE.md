@@ -100,7 +100,10 @@ disconnects.
   privately and need the real bank messages. The SMS-box channel's behaviour
   is unchanged, and whether it keeps automatic confirmation is a separate owner
   decision still required before production. Criteria: 13 of 13 met, all by
-  repository tests; nothing ran on a stand or a handset.
+  repository tests. Deployed to the development stand on 2026-09-22 with the
+  schema migration; existing deal and ledger money state was unchanged by it, and
+  the handset kept reporting normally. The invariant itself was not exercised
+  there by a live deal, and the handset application was not changed.
 - **Its implementation:** head `e24fee0`; `v2` run `35701164674` on that exact
   head, **success** across all three jobs. The closeout commit that follows it
   touches documentation only, which the workflow does not cover.
