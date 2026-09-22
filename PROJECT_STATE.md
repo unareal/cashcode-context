@@ -94,8 +94,9 @@ disconnects.
   - an application listed under two different banks no longer takes one of the
     two names while its attribution is unproven; the notification is still
     delivered, recorded and shown to the operator. This restriction lives in the
-    handset application only — it is not a server guarantee of the source, and
-    it is in effect nowhere until a separately authorised build is installed;
+    handset application only — it is not a server guarantee of the source, it
+    reaches a handset only with a new build, and whether it actually takes
+    effect on a device is one of the deferred criteria below;
   - one duplicated entry removed and two display names aligned to the
     catalogue. Which bank a short code belongs to was **not** changed.
 
@@ -115,8 +116,14 @@ disconnects.
   the automatic recognition of some legitimate sender spellings — an accepted,
   recorded loss in the safe direction: the error is a payment not confirmed,
   never a payment wrongly confirmed. Which spellings are affected is recorded
-  privately, and the risk stays open until the real corpus. Nothing was
-  deployed: the stand and the handset still run the previous behaviour.
+  privately, and the risk stays open until the real corpus. Deployed to the
+  development stand on 2026-09-22 under a separate authorisation: the server
+  moved with a stop window of about a second, the handset was updated in place
+  and kept its binding, and no migration was needed. Money, statuses, the event
+  queue and the schema version were unchanged. That the installed build really
+  carries both changes was proven by comparing it with the previous one —
+  but installing a version proves nothing about whether real bank
+  notifications are recognised correctly, and the stand has none.
 - **Its implementation:** head `ffbddf4`; `v2` run `35776873900` on that exact
   head, **success** across all three jobs. The handset checks, which `v2` does
   not cover, passed locally: 270 unit tests with 0 failures and 2 skipped, and
@@ -357,9 +364,7 @@ disconnects.
   production readiness, listed at the end of this file - among them proving which
   deal a bank payment belongs to - plus two records there that the owner
   deliberately did not declare mandatory. The payment-attribution task's
-  remainder cannot start before real bank messages exist. The source-and-name
-  work is committed but not deployed to the development stand or to the
-  handset. No further
+  remainder cannot start before real bank messages exist. No further
   pre-production task has been started, and none starts by itself.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
