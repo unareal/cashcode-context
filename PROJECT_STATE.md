@@ -76,30 +76,42 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `042-bank-message-corpus` — the technical part of the
-  parser-corpus task, and **only** that part. The project holds **no real bank
-  message at all**, so this task built what a real corpus will need instead of
-  pretending to have one: one corpus format, in which every sample must declare
-  whether it is real, engineered or of unknown origin, and two test harnesses
-  that run every sample through the actual parsers of both channels - the
-  handset's and the SMS-box's. Each sample keeps what the code answers today
-  apart from what the message actually means, and every disagreement between
-  the two is recorded rather than hidden or "fixed" into agreement. Checks
-  enforce the structure, the origin classes and an anonymisation safety net,
-  and no test failure ever prints message content.
-  **What it holds:** 43 engineered samples and 10 of unknown origin; **real
-  samples: 0**. The engineered run recorded parser defects, kept as findings
-  and not fixed, because changing what a parser answers changes which events
-  can confirm deals. **A green run proves that the code still answers what is
-  recorded; it proves nothing about how a real bank writes, and no parser is
-  declared validated by it.**
-  Collecting the real anonymised corpus is now item **G-4** of the external
-  validation gate, and the task's criteria that need it stay owner-deferred.
-  No production behaviour changed.
-- **Its implementation:** head `e71c1c1`; `v2` run `35679026299` on that exact
+- **Completed task:** `043-deal-attribution-ambiguity` — the part of the task
+  proving which deal a bank payment belongs to that could be decided without
+  real bank messages, and **only** that part. Three changes, each an owner
+  decision:
+  - **one open deal of a given amount per handset.** Two such deals could not
+    be told apart by the notification that paid one of them. That state is now
+    impossible: the database itself refuses it, whatever
+    route writes a deal, including concurrent creations, and deal selection
+    avoids it. The cost is fewer simultaneous deals per handset, accepted by
+    the owner. The SMS-box channel was left unchanged;
+  - **no choosing between candidates.** If an event still fits more than one
+    open deal, nothing is confirmed and the event is recorded as ambiguous for
+    an operator, instead of the oldest deal being picked;
+  - **an amount is no longer read as a card number.** A narrow parser-side fix
+    stops the payment amount being mistaken for card digits. It can only make
+    automatic confirmation stricter.
+
+  **This is not proof that a payment belongs to a deal.** It removes one class
+  of ambiguity. Residual risks remain open — a payment confirming a deal it was
+  not made for, and one payment settling more than once — in cases that
+  depend on bank-side facts no local rule can establish; they are recorded
+  privately and need the real bank messages. The SMS-box channel's behaviour
+  is unchanged, and whether it keeps automatic confirmation is a separate owner
+  decision still required before production. Criteria: 13 of 13 met, all by
+  repository tests; nothing ran on a stand or a handset.
+- **Its implementation:** head `e24fee0`; `v2` run `35701164674` on that exact
   head, **success** across all three jobs. The closeout commit that follows it
-  touches documentation only, which the workflow does not cover. The branch
-  head is `73849a5` and is synchronized with its remote.
+  touches documentation only, which the workflow does not cover.
+- **Previously completed:** `042-bank-message-corpus` — the technical part of
+  the parser-corpus task: one corpus format in which every sample declares
+  whether it is real, engineered or of unknown origin, and test harnesses that
+  run every sample through the actual parsers of both channels, keeping what
+  the code answers apart from what the message means. **Real samples: 0.** A
+  green run proves the code still answers what is recorded, not how a real bank
+  writes. Collecting the real anonymised corpus is item **G-4** of the external
+  validation gate. Head `e71c1c1`, `v2` run `35679026299`, **success**.
 - **Previously completed:** `041-bank-event-durable-delivery` — an observed bank
   event now survives on the handset in an encrypted durable queue until the
   server has decided it, or until the binding ends, which discards it with the
@@ -276,16 +288,17 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `042-bank-message-corpus` is CLOSED for its technical
-  part, and so are `041-bank-event-durable-delivery`,
+- **Current/next task:** `043-deal-attribution-ambiguity` is CLOSED, and so are
+  `042-bank-message-corpus` (technical part), `041-bank-event-durable-delivery`,
   `040-requisite-block-bypass`, `039-device-diagnostics-and-operator-health`,
   `037-android-preproduction-hardening` and `036-merchant-api-hardening`
   before it. The financial-core redesign program's
   phase list was already closed by `016-legacy-removal`; what remains are the
   separate pre-production tasks listed at the end of this file. The real
-  parser corpus waits for the external gate, and the task proving which deal a
-  bank payment belongs to HAS NOT STARTED, and neither has any other item
-  there. By owner decision each is a bounded task of its own, none starts
+  parser corpus waits for the external gate. The task proving which deal a
+  bank payment belongs to is only PARTLY DONE: its autonomous part is closed,
+  and its remainder waits for the real corpus. No other item there has
+  started. By owner decision each is a bounded task of its own, none starts
   automatically, and none of them is a production deployment.
 - **Nothing breaks at the switch any more.** Device self-update was fixed in the
   cutover preparation; the merchant dashboard cards that could only go blank -
@@ -304,7 +317,8 @@ disconnects.
   declared until all four are. Further items are recorded as mandatory before
   production readiness, listed at the end of this file - among them proving which
   deal a bank payment belongs to - plus two records there that the owner
-  deliberately did not declare mandatory. No further
+  deliberately did not declare mandatory. The payment-attribution task's
+  remainder cannot start before real bank messages exist. No further
   pre-production task has been started, and none starts by itself.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
@@ -1206,19 +1220,22 @@ down and agreed as mandatory, which is a different thing from having been run:
   how sources and banks are named; they are **recorded privately as mandatory
   items before production readiness**, some of them folded into the matching
   task below. None of them has been fixed, and none is an accepted risk.
-- **Proving which deal a bank payment belongs to — mandatory, not started.**
+- **Proving which deal a bank payment belongs to — mandatory, partly done.**
   Durable delivery made one delivered event settle at most once; it did not, and
   was never meant to, establish that a given payment was made for a given deal.
-  **The existing matching is not declared safe.** Residual risks remain open of
-  a payment confirming a deal it was not made for, and of one payment being
-  settled more than once; they are recorded privately, and they arise in cases
-  the current rules do not recognise, so refusing the recognised ones does not
-  cover them. The parser-corpus task added inputs to it and did not start
-  it. This task must close them before production readiness can be
-  declared. It must rest on real anonymised bank messages rather than invented
-  ones, and those messages are an input to it, not its solution: if they carry
-  no reliable identifier of the operation, the matching model itself needs a
-  separate owner decision.
+  The autonomous part of this task is closed: two open deals of one amount can
+  no longer coexist on one handset, an event that still fits several deals
+  confirms none, and an amount is no longer read as a card number. **The
+  matching is still not declared safe.** Residual risks remain open of a
+  payment confirming a deal it was not made for, and of one payment being
+  settled more than once; they are recorded privately and depend on bank-side
+  facts that no local rule establishes. What remains mandatory: the real
+  anonymised bank messages (gate item G-4) and what they show — above all
+  whether they carry a reliable identifier of the bank operation; if they do
+  not, the matching model itself and its residual risk need a separate owner
+  decision; the owner decision on whether the SMS-box channel keeps automatic
+  confirmation; and an open question about how the platform identifies a
+  recipient across requisites, which today's data cannot answer reliably.
 - **Three items the device-health task recorded as mandatory before production
   readiness, none of them started** (its fourth, durable delivery of bank
   events, is done). Two questions about the lifetime of a device's candidate
