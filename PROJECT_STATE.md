@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-09-22
+Last updated: 2026-09-24
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -76,59 +76,57 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `045-bank-source-and-name-catalogue` — how the platform
-  decides which source a bank event came from and which bank it names. The bank
-  name a notification carries is what the server compares with the payment
-  details, and it weighs heavily in whether a payment is accepted as confirming
-  a deal, yet nothing compared the three directories that produce that name with
-  the catalogue the payment details take their name from. Fixed in the
-  repository, all within the identifiers already listed:
-  - the handset's sender check and the naming of a sender's bank used
-    different, inconsistent rules, so part of the handset's own list was
-    unreachable and a real credit from some banks could never confirm anything.
-    Both now derive from one place and cannot disagree;
-  - recognising a sender and naming its bank were decided separately and could
-    name a bank other than the one that actually sent the money — a path to
-    confirming a deal that belongs to other payment details. That path is
-    closed in the repository;
-  - an application listed under two different banks no longer takes one of the
-    two names while its attribution is unproven; the notification is still
-    delivered, recorded and shown to the operator. This restriction lives in the
-    handset application only — it is not a server guarantee of the source, it
-    reaches a handset only with a new build, and whether it actually takes
-    effect on a device is one of the deferred criteria below;
-  - one duplicated entry removed and two display names aligned to the
-    catalogue. Which bank a short code belongs to was **not** changed.
+- **Completed task:** `046-device-offline-recovery` — what happens when a
+  handset stops being heard from and then comes back. When no heartbeat is
+  recorded for longer than the offline threshold, the server takes the device
+  and its payment details out of deal matching; that is unchanged and is not a
+  defect. What was missing was any memory of what had been switched off: after
+  the phone came back, nothing distinguished details that had been in service
+  from details an operator had deliberately kept off, so an operator had to
+  re-enable everything by hand and guess. Now:
+  - at the moment of the automatic switch-off the server records what it
+    switched off in the same transaction; if that record cannot be written,
+    the switch-off still happens and no offer is made;
+  - when the phone is back, the panel **offers** to return exactly that - the
+    device first, then each formerly active detail - one click per step,
+    through the ordinary routes and all their checks. Nothing returns by
+    itself because heartbeats resumed, formerly pending details are shown for
+    reference only, and details that were off or blocked are never offered;
+  - any operator action afterwards takes priority and withdraws the offer, and
+    switch-offs that happened before this change produce no offer;
+  - if the demotion of the details cannot be written, the device alone is
+    switched off, and the pending demotion must complete before the device
+    can be switched on again, so no detail re-enters deal matching without an
+    explicit confirmation.
 
-  A structural check now compares all three directories with the catalogue on
-  every run and separates what must agree, what is a technical defect, and what
-  stays unverified. Criteria: 12 of 12 autonomous ones met by repository tests,
-  against engineered messages only.
-
-  **This does not establish that a sender or an application belongs to the bank
-  it is listed under, and it does not close the question of which applications
-  may be a source at all.** That question stays mandatory before production and
-  waits for the real corpus (gate item **G-4**). Five further criteria are
-  explicitly deferred to it: the attribution of two applications, of one more
-  entry, of every short code, the review of the list against the banks the first
-  users will actually use, and the confirmation that the restriction above
-  actually takes effect on the handset. Tightening the sender check also cost
-  the automatic recognition of some legitimate sender spellings — an accepted,
-  recorded loss in the safe direction: the error is a payment not confirmed,
-  never a payment wrongly confirmed. Which spellings are affected is recorded
-  privately, and the risk stays open until the real corpus. Deployed to the
-  development stand on 2026-09-22 under a separate authorisation: the server
-  moved with a stop window of about a second, the handset was updated in place
-  and kept its binding, and no migration was needed. Money, statuses, the event
-  queue and the schema version were unchanged. That the installed build really
-  carries both changes was proven by comparing it with the previous one —
-  but installing a version proves nothing about whether real bank
-  notifications are recognised correctly, and the stand has none.
-- **Its implementation:** head `ffbddf4`; `v2` run `35776873900` on that exact
-  head, **success** across all three jobs. The handset checks, which `v2` does
-  not cover, passed locally: 270 unit tests with 0 failures and 2 skipped, and
-  the debug build succeeds. The closeout commit that follows touches
-  documentation only.
+  The earlier stand episode that raised this was traced to the **server side**:
+  the handset kept sending, but the server failed to record its heartbeats for longer than the offline
+  threshold. Why the server side degraded is **not established**. A
+  24-hour observation of the one handset found every heartbeat interval normal
+  and no offline episode - which does not show one cannot happen in operation.
+  Deployed to the development stand on 2026-09-24 with a schema change and a
+  short stop; money and statuses were unchanged. A live run on the stand then
+  went through the whole path: automatic switch-off with its record, no
+  automatic return after the heartbeat came back, the offer shown in the trader
+  panel, the device and the detail restored by separate clicks, and the detail
+  entering deal matching only after its own click; device and detail statuses and the money state were then returned to
+  their prior values. Criteria: 21 of 21 accounted for; one was accepted by the
+  owner with a named limitation - the offer was **not** checked visually in the
+  administrator panel, whose response is covered by tests only.
+- **Its implementation:** head `a13f3d7`; `v2` run `35925843114` on that exact
+  head, **success** across all three jobs. The closeout commits that follow
+  touch documentation only.
+- **Previously completed:** `045-bank-source-and-name-catalogue` — the three
+  directories that name a bank event's source are now checked against the
+  catalogue the payment details take their name from, and a path by which a
+  sender could name a bank other than the one that sent the money is closed in
+  the repository; one restriction lives in the handset only and is not a server
+  guarantee. Some legitimate sender spellings are no longer recognised
+  automatically - a recorded loss in the safe direction, open until the real
+  corpus. It does not establish that any sender or application belongs to
+  the bank it is listed under; five criteria wait for the real corpus (gate item
+  **G-4**). Head `ffbddf4`; `v2` run `35776873900`, **success**; deployed to the
+  development stand on 2026-09-22.
 - **Previously completed:** `044-blocking-notice-classification` — bank
   notifications that a parser wrongly read as a block of the payment details. A
   notification now counts as a block only when it states unambiguously that a
@@ -332,8 +330,9 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `045-bank-source-and-name-catalogue` is CLOSED in its
-  autonomous part, and so are `044-blocking-notice-classification`,
+- **Current/next task:** `046-device-offline-recovery` is CLOSED, and so are
+  `045-bank-source-and-name-catalogue` (in its autonomous part),
+  `044-blocking-notice-classification`,
   `043-deal-attribution-ambiguity`, `042-bank-message-corpus` (technical
   part), `041-bank-event-durable-delivery`,
   `040-requisite-block-bypass`, `039-device-diagnostics-and-operator-health`,
@@ -1286,15 +1285,16 @@ down and agreed as mandatory, which is a different thing from having been run:
   decision; the owner decision on whether the SMS-box channel keeps automatic
   confirmation; and an open question about how the platform identifies a
   recipient across requisites, which today's data cannot answer reliably.
-- **Three items the device-health task recorded as mandatory before production
-  readiness, none of them started** (its fourth, durable delivery of bank
-  events, is done). Two questions about the lifetime of a device's candidate
-  key pair are carried over from an earlier task and still need an owner
-  decision. One item is stand operations, tracked privately. And a handset that
-  went silent and returned stayed switched off with its requisites out of deal
-  matching, because nothing raises them automatically - why it fell silent is
-  not established, and it is an investigation rather than an unexamined risk.
-  None of them is an accepted risk or a waiver.
+- **Two items the device-health task recorded as mandatory before production
+  readiness, none of them started** (its other two - durable delivery of bank
+  events and a handset that fell silent and was not returned to service - are
+  done). Two questions about the lifetime of a device's candidate key pair are
+  carried over from an earlier task and still need an owner decision. One item
+  is stand operations, tracked privately. None of them is an accepted risk or a
+  waiver. Left open by the offline-recovery task and recorded rather than
+  closed: why the server side once failed to record heartbeats is not
+  established, and a silent phone keeps receiving new deals until the offline
+  threshold passes - existing behaviour that task did not change.
 - **Validate that a production configuration fails closed, and close the carried
   authorisation gaps.** Two related pieces of open technical debt, both inherited
   from the legacy platform rather than introduced by the rewrite. First, parts of
