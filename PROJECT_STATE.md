@@ -76,7 +76,19 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `052-default-fee-grid-concurrency` — concurrent edits
+- **Completed task:** `053-merchant-bank-fee-concurrency` — concurrent edits
+  of a merchant's bank-specific fee ranges are serialised, so two overlapping
+  ranges of one merchant can no longer both be accepted. A bounded review of
+  the remaining fee writes tied to the same non-overlap rule found no other
+  unprotected one. Fee rules, fee calculation, tier selection, roles, the API
+  and existing deals are unchanged. Deployed to the development stand (Web
+  only) on 2026-09-24 without a schema change; the phone, the custody
+  exchange, the money state and the fee tables were unchanged, and the stand's
+  fee tables still have no overlap. The serialisation was proven by
+  integration tests, including checks that fail when it is removed, and by
+  CI - not exercised live, which would have meant changing tariffs. Head
+  `77ccb7f`; `v2` run `35983911940`, **success**.
+- **Previously completed:** `052-default-fee-grid-concurrency` — concurrent edits
   of the default fee schedule are serialised, so two overlapping ranges can no
   longer both be accepted; the non-overlap rule now holds under concurrency as
   it did for one edit at a time. Fee rules, tier selection, roles, the API and
@@ -374,7 +386,8 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `052-default-fee-grid-concurrency`,
+- **Current/next task:** `053-merchant-bank-fee-concurrency`,
+  `052-default-fee-grid-concurrency`,
   `051-trader-fee-replacement-atomicity`,
   `050-frontend-lint-restoration` and
   `049-device-requisite-authorization-gaps` are CLOSED;
@@ -396,8 +409,10 @@ disconnects.
   and its remainder waits for the real corpus. The carried authorisation gaps
   are closed (`049`); the production-configuration item is implemented
   (`048`) and waits only for its check against real infrastructure; the
-  default-fee-schedule item is closed (`052`). No other item there has started. By owner decision each is a bounded task of its own, none starts
-  automatically, and none of them is a production deployment.
+  default-fee-schedule and bank-specific-fee items are closed (`052`, `053`).
+  No other item there has started. By owner decision each is a bounded task
+  of its own, none starts automatically, and none of them is a production
+  deployment.
 - **Nothing breaks at the switch any more.** Device self-update was fixed in the
   cutover preparation; the merchant dashboard cards that could only go blank -
   their figures came from a withdrawal model that no longer exists, an exclusion
@@ -416,10 +431,9 @@ disconnects.
   production readiness, listed at the end of this file - among them proving which
   deal a bank payment belongs to - plus two records there that the owner
   deliberately did not declare mandatory. The payment-attribution task's
-  remainder cannot start before real bank messages exist. Tasks `048` to `052`
-  are done (`048` except its real-infrastructure check); the
-  mandatory item about a merchant's bank-specific fees, found by `052`, has
-  not been started, and no pre-production task starts by itself.
+  remainder cannot start before real bank messages exist. Tasks `048` to `053`
+  are done (`048` except its real-infrastructure check), and no pre-production
+  task starts by itself.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
   production secrets.
@@ -1363,15 +1377,13 @@ been run. Where one has been done, it says so below:
   confirmed before it is next updated. The carried authorisation gaps on device
   and requisite routes that formed the second half of the item are closed
   (`049`).
-- **Concurrent edits of a merchant's bank-specific fees - mandatory, not
-  started.** Found by the audit of task `052` and registered by owner decision:
-  concurrent writes of a merchant's bank-specific fee ranges can get past the
-  rule that those ranges must not overlap. It is recorded as mandatory before
-  production readiness and has not been started; the next fee task opens with
-  one bounded review of the remaining fee writes tied to the same rule, so
-  that they are closed together rather than one handler at a time.
-- (The former item about concurrent edits of the default fee schedule is closed
-  by `052`. The former item about
+- (The former item about concurrent edits of a merchant's bank-specific fees
+  is closed by `053`; a separate, pre-existing defect it recorded stays open:
+  in a narrow case an administrator's edit of a bank-specific fee can be
+  reported as successful although that fee no longer exists. The fee is not
+  restored, no money moves and existing deals are unaffected; only the answer
+  is wrong. The former item about concurrent edits of the default fee schedule
+  is closed by `052`. The former item about
   a partially applied individual fee schedule is closed by `051`; a related
   residual risk stays documented: concurrent schedule changes for two
   different merchants can fail and roll back completely, without partial
