@@ -363,7 +363,9 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `051-trader-fee-replacement-atomicity`,
+- **Current/next task:** `052-default-fee-grid-concurrency` is implemented
+  (`b5ea9af`, `v2` run `35977039152` success) but not yet deployed to the
+  development stand and not closed; `051-trader-fee-replacement-atomicity`,
   `050-frontend-lint-restoration` and
   `049-device-requisite-authorization-gaps` are CLOSED;
   `048-production-config-fail-closed` is implemented and deployed to the
@@ -383,8 +385,9 @@ disconnects.
   bank payment belongs to is only PARTLY DONE: its autonomous part is closed,
   and its remainder waits for the real corpus. The carried authorisation gaps
   are closed (`049`); the production-configuration item is implemented
-  (`048`) and waits only for its check against real infrastructure. No other
-  item there has started. By owner decision each is a bounded task of its own, none starts
+  (`048`) and waits only for its check against real infrastructure; the
+  default-fee-schedule item is implemented (`052`) and awaits its rollout to
+  the development stand. No other item there has started. By owner decision each is a bounded task of its own, none starts
   automatically, and none of them is a production deployment.
 - **Nothing breaks at the switch any more.** Device self-update was fixed in the
   cutover preparation; the merchant dashboard cards that could only go blank -
@@ -397,7 +400,7 @@ disconnects.
   live run happened on a test network with test funds, on a disposable private
   stand, under an authorisation that explicitly excluded production, mainnet and
   production secrets.
-- **Next action:** no task in flight, and several things are outstanding that
+- **Next action:** task `052` awaits its development-stand rollout, and several things are outstanding that
   are not optional. The mandatory external validation gate below now holds
   four checks and none of them has been run; production readiness cannot be
   declared until all four are. Further items are recorded as mandatory before
@@ -405,9 +408,10 @@ disconnects.
   deal a bank payment belongs to - plus two records there that the owner
   deliberately did not declare mandatory. The payment-attribution task's
   remainder cannot start before real bank messages exist. Tasks `048` to `051`
-  are done (`048` except its real-infrastructure check); the new mandatory
-  item about the default fee schedule, found by `051`, has not been started,
-  and no pre-production task starts by itself.
+  are done (`048` except its real-infrastructure check); `052`, the item about
+  the default fee schedule, is implemented and awaits rollout; the new
+  mandatory item about a merchant's bank-specific fees, found by `052`, has
+  not been started, and no pre-production task starts by itself.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
   production secrets.
@@ -1351,12 +1355,21 @@ been run. Where one has been done, it says so below:
   confirmed before it is next updated. The carried authorisation gaps on device
   and requisite routes that formed the second half of the item are closed
   (`049`).
-- **Concurrent edits of the default fee schedule - mandatory, not started.**
+- **Concurrent edits of a merchant's bank-specific fees - mandatory, not
+  started.** Found by the audit of task `052` and registered by owner decision:
+  concurrent writes of a merchant's bank-specific fee ranges can get past the
+  rule that those ranges must not overlap. It is recorded as mandatory before
+  production readiness and has not been started; the next fee task opens with
+  one bounded review of the remaining fee writes tied to the same rule, so
+  that they are closed together rather than one handler at a time.
+- **Concurrent edits of the default fee schedule - implemented, awaiting
+  development-stand rollout (task `052`).**
   Found by the audit of `051` and registered by owner decision: concurrent
-  writes to the default fee schedule are not serialised, so the rule that its
-  ranges must not overlap can be broken under concurrency and the fee of new
-  deals can then be taken from an unintended range. It is recorded as mandatory
-  before production readiness and has not been started. (The former item about
+  writes to the default fee schedule were not serialised, so the rule that its
+  ranges must not overlap could be broken under concurrency and the fee of new
+  deals then taken from an unintended range. Task `052` serialises those
+  writes; it is implemented and verified in the repository and CI, not yet
+  deployed to the development stand, so the item is not closed. (The former item about
   a partially applied individual fee schedule is closed by `051`; a related
   residual risk stays documented: concurrent schedule changes for two
   different merchants can fail and roll back completely, without partial
