@@ -76,46 +76,44 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `046-device-offline-recovery` — what happens when a
-  handset stops being heard from and then comes back. When no heartbeat is
-  recorded for longer than the offline threshold, the server takes the device
-  and its payment details out of deal matching; that is unchanged and is not a
-  defect. What was missing was any memory of what had been switched off: after
-  the phone came back, nothing distinguished details that had been in service
-  from details an operator had deliberately kept off, so an operator had to
-  re-enable everything by hand and guess. Now:
-  - at the moment of the automatic switch-off the server records what it
-    switched off in the same transaction; if that record cannot be written,
-    the switch-off still happens and no offer is made;
-  - when the phone is back, the panel **offers** to return exactly that - the
-    device first, then each formerly active detail - one click per step,
-    through the ordinary routes and all their checks. Nothing returns by
-    itself because heartbeats resumed, formerly pending details are shown for
-    reference only, and details that were off or blocked are never offered;
-  - any operator action afterwards takes priority and withdraws the offer, and
-    switch-offs that happened before this change produce no offer;
-  - if the demotion of the details cannot be written, the device alone is
-    switched off, and the pending demotion must complete before the device
-    can be switched on again, so no detail re-enters deal matching without an
-    explicit confirmation.
+- **Completed task:** `047-device-key-lifecycle` — the two owner questions
+  about the lifetime of a device's key pair that earlier tasks carried as
+  mandatory before production are settled and implemented:
+  - a key that a device has retired - the key of a revoked device, or one a
+    later binding replaced - is not accepted again for that device by a
+    fresh enrollment code. The server refuses it before the operator's code is spent, and the
+    phone then discards that key through its existing teardown and binds a new
+    one with the same code, once. The current key of a device that is not
+    revoked re-binds as before;
+  - a transient key-store or network failure never destroys a key, and the
+    enrollment path no longer replaces a stored key it merely failed to read;
+  - bank events left on a phone from a previous binding are never sent under a
+    new one, even on the same handset: before binding, the phone shows their
+    exact number and destroys them only on the person's explicit
+    confirmation; a refusal leaves the events, the key and the code untouched;
+  - an unbound phone whose key has failed repeatedly offers a confirmed "reset
+    device key", so recovery no longer needs a reinstall.
 
-  The earlier stand episode that raised this was traced to the **server side**:
-  the handset kept sending, but the server failed to record its heartbeats for longer than the offline
-  threshold. Why the server side degraded is **not established**. A
-  24-hour observation of the one handset found every heartbeat interval normal
-  and no offline episode - which does not show one cannot happen in operation.
-  Deployed to the development stand on 2026-09-24 with a schema change and a
-  short stop; money and statuses were unchanged. A live run on the stand then
-  went through the whole path: automatic switch-off with its record, no
-  automatic return after the heartbeat came back, the offer shown in the trader
-  panel, the device and the detail restored by separate clicks, and the detail
-  entering deal matching only after its own click; device and detail statuses and the money state were then returned to
-  their prior values. Criteria: 21 of 21 accounted for; one was accepted by the
-  owner with a named limitation - the offer was **not** checked visually in the
-  administrator panel, whose response is covered by tests only.
-- **Its implementation:** head `a13f3d7`; `v2` run `35925843114` on that exact
-  head, **success** across all three jobs. The closeout commits that follow
-  touch documentation only.
+  Deployed to the development stand on 2026-09-24 without a schema change,
+  handset first; the live binding, its key and the money state were unchanged.
+  Two live checks were run on isolated probe applications and a temporary
+  device rather than on the live binding: on the tested handset, clearing app
+  data removes the app's key-store keys (an earlier assumption said it did
+  not), and the retired-key refusal, discard and re-binding worked end to end
+  with no critical alert. Criteria: 17 of 17.
+- **Its implementation:** head `bab2986`; `v2` run `35938820508` on that exact
+  head, **success** across all three jobs. The closeout commit that follows
+  touches documentation only.
+- **Previously completed:** `046-device-offline-recovery` — after an automatic
+  offline switch-off the server now remembers what it switched off, and when
+  the phone is back the panel offers to return exactly that, one click per
+  step through the ordinary routes; nothing returns by itself, and details
+  that were off or blocked are never offered. The stand episode that raised it
+  was a server-side failure to record heartbeats whose cause is **not
+  established**. Deployed to the development stand and run live on
+  2026-09-24; criteria 21 of 21, one accepted by the owner with a named
+  limitation (the administrator-panel view was not checked visually). Head
+  `a13f3d7`, `v2` run `35925843114` success.
 - **Previously completed:** `045-bank-source-and-name-catalogue` — the three
   directories that name a bank event's source are now checked against the
   catalogue the payment details take their name from, and a path by which a
@@ -209,8 +207,8 @@ disconnects.
   has not been run.
   Three follow-up items are recorded in the private repository. They concern
   device key lifecycle and enrollment recovery, none of them blocks the closure
-  of this task, and two of the three need an owner decision before their
-  semantics can be settled.
+  of this task; the two that needed an owner decision were settled and closed
+  by `047`.
 - **Previously completed:** `036-merchant-api-hardening`. The
   merchant public API now has a single authentication scheme, the one the
   platform will launch with, replacing the one carried over from the legacy
@@ -330,7 +328,8 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `046-device-offline-recovery` is CLOSED, and so are
+- **Current/next task:** `047-device-key-lifecycle` is CLOSED, and so are
+  `046-device-offline-recovery`,
   `045-bank-source-and-name-catalogue` (in its autonomous part),
   `044-blocking-notice-classification`,
   `043-deal-attribution-ambiguity`, `042-bank-message-corpus` (technical
@@ -1285,13 +1284,13 @@ down and agreed as mandatory, which is a different thing from having been run:
   decision; the owner decision on whether the SMS-box channel keeps automatic
   confirmation; and an open question about how the platform identifies a
   recipient across requisites, which today's data cannot answer reliably.
-- **Two items the device-health task recorded as mandatory before production
-  readiness, none of them started** (its other two - durable delivery of bank
-  events and a handset that fell silent and was not returned to service - are
-  done). Two questions about the lifetime of a device's candidate key pair are
-  carried over from an earlier task and still need an owner decision. One item
-  is stand operations, tracked privately. None of them is an accepted risk or a
-  waiver. Left open by the offline-recovery task and recorded rather than
+- **One item the device-health task recorded as mandatory before production
+  readiness, not started:** stand operations, tracked privately. Its other
+  items - durable delivery of bank events, a handset that fell silent and was
+  not returned to service, and the lifetime of a device's key pair - are done.
+  It is not an accepted risk or a waiver. The key-pair task leaves recorded
+  residual risks of its own, among them a possible false critical alert in a
+  narrow re-binding case. Left open by the offline-recovery task and recorded rather than
   closed: why the server side once failed to record heartbeats is not
   established, and a silent phone keeps receiving new deals until the offline
   threshold passes - existing behaviour that task did not change.
