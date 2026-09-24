@@ -76,7 +76,23 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `049-device-requisite-authorization-gaps` — the
+- **Completed task:** `050-frontend-lint-restoration` — the web client's linter
+  runs again and checks the code. It had been aborting on its first file
+  because of an incompatible pair of pinned tooling versions; one of them was
+  moved within its declared range, the production build stayed byte-identical,
+  and the checker's configuration was not weakened. It immediately found two
+  kinds of real defect, both fixed: one silently disabled a client-side
+  consistency check on fee settings, the other was a scoping error. The
+  remaining historical findings - 464 errors - are **recorded as a baseline, by
+  owner decision, not fixed**: every rule stays enabled; a new rule violation in
+  a file, or growth in a file's count for a suppressed rule, fails the run; the
+  baseline is counted per file and rule, not per finding, and can only shrink. It is technical debt,
+  not evidence that the existing code is clean; 27 warnings stay visible. A
+  dedicated CI workflow now installs, lints and builds the web client on every
+  change to it. The web client's type-check errors (385) remain a separate
+  baseline; the build does not type-check. Head `ec2f222`; `frontend` run
+  `35961620941`, **success**.
+- **Previously completed:** `049-device-requisite-authorization-gaps` — the
   authorisation and validation gaps inherited from the legacy platform on some
   device and requisite routes, carried on purpose since the porting phase, are
   closed under four owner decisions: a team lead reads only what belongs to
@@ -90,10 +106,8 @@ disconnects.
   phone, the custody exchange and the money state were unchanged. The role
   behaviour was proven by integration tests and CI, not exercised live - the
   stand has no users of the affected roles, and no account was created or
-  altered for it. Criteria: all passed.
-- **Its implementation:** head `04bae80`; `v2` run `35956932107` on that exact
-  head, **success** across all three jobs. The closeout commits that follow
-  touch documentation only.
+  altered for it. Criteria: all passed. Head `04bae80`, `v2` run
+  `35956932107` success.
 - **Implemented, not closed:** `048-production-config-fail-closed` — a production
   or staging configuration now refuses to start when mandatory infrastructure
   or settings are missing, instead of silently running in an incomplete or
@@ -337,7 +351,8 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `049-device-requisite-authorization-gaps` is CLOSED;
+- **Current/next task:** `050-frontend-lint-restoration` and
+  `049-device-requisite-authorization-gaps` are CLOSED;
   `048-production-config-fail-closed` is implemented and deployed to the
   development stand but not closed, awaiting its real-infrastructure
   criterion; `047-device-key-lifecycle` is CLOSED, and so are
@@ -376,9 +391,10 @@ disconnects.
   production readiness, listed at the end of this file - among them proving which
   deal a bank payment belongs to - plus two records there that the owner
   deliberately did not declare mandatory. The payment-attribution task's
-  remainder cannot start before real bank messages exist. Tasks `048` and
-  `049` are done (`048` except its real-infrastructure check); no other
-  pre-production task has been started, and none starts by itself.
+  remainder cannot start before real bank messages exist. Tasks `048`, `049`
+  and `050` are done (`048` except its real-infrastructure check); the new
+  mandatory fee-schedule atomicity item found by `050` has not been started, and no pre-production
+  task starts by itself.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
   production secrets.
@@ -716,11 +732,14 @@ Completed architecture/specification milestones:
   still reach nobody, because the state it produces is not the state the notifier
   watches. The freeze introduced by the recovery check was exactly that: correct,
   covered, and silent. Check the path from condition to person, not the condition.
-- **The frontend lint command is permanently broken in this baseline** - it fails
-  while loading a rule, on the first file it is given, so its result is
-  independent of the code. It has now been written into an acceptance criterion twice and removed
-  twice. The reason it keeps coming back is that the master task's own check list
-  still names it; a phase that copies that list inherits the defect.
+- **The frontend lint command works again, against a recorded baseline** (task
+  `050`). A green lint means no file gained a violation of a new rule and no suppressed
+  per-file, per-rule count grew - not "no findings", and not that each finding
+  is the same one as before (one suppressed finding swapped for another of the
+  same rule in the same file is not detected):
+  464 historical errors are suppressed on purpose and remain debt. Fixing one
+  requires shrinking the baseline in the same change; regenerating the baseline
+  to hide a new finding defeats it. The build still does not type-check.
 
 - **The order of parts in a multipart dispute upload is load-bearing.** `deal_id` and `reason`
   must be sent before the first file part; a non-file part after it is refused with a 400. That
@@ -1319,13 +1338,14 @@ been run. Where one has been done, it says so below:
   confirmed before it is next updated. The carried authorisation gaps on device
   and requisite routes that formed the second half of the item are closed
   (`049`).
-- **The web client's linter does not run at all, and must before production.**
-  It aborts while loading one of its own rules and therefore checks nothing;
-  the breakage predates the task that found it and was not caused by it. Fixing
-  it means moving dependency versions, which is its own risk and was
-  deliberately kept out of a task about blocking rules. Until it is fixed, no
-  linting result may be claimed for the web client — the type check and the
-  production build are what actually run there.
+- **A fee-schedule save can leave a partial schedule - mandatory, not started.**
+  Found by `050`: the server-side replacement of a trader's individual fee
+  schedule is not atomic, so a failure part-way through a save can leave the
+  schedule partially applied. The client-side check restored by `050` narrows
+  how often that is reached; it does not close it. It is recorded as mandatory
+  before production readiness and has not been started. (The former item about
+  the web client's linter is closed by `050`, with its historical findings
+  recorded as a baseline rather than fixed.)
 - **Recorded, and deliberately NOT declared mandatory by the owner:** the
   structural check that protects the blocking rule is a fence rather than a
   proof. Two independent adversarial passes found ways past it; all but one were
