@@ -76,34 +76,43 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `047-device-key-lifecycle` — the two owner questions
-  about the lifetime of a device's key pair that earlier tasks carried as
-  mandatory before production are settled and implemented:
-  - a key that a device has retired - the key of a revoked device, or one a
-    later binding replaced - is not accepted again for that device by a
-    fresh enrollment code. The server refuses it before the operator's code is spent, and the
-    phone then discards that key through its existing teardown and binds a new
-    one with the same code, once. The current key of a device that is not
-    revoked re-binds as before;
-  - a transient key-store or network failure never destroys a key, and the
-    enrollment path no longer replaces a stored key it merely failed to read;
-  - bank events left on a phone from a previous binding are never sent under a
-    new one, even on the same handset: before binding, the phone shows their
-    exact number and destroys them only on the person's explicit
-    confirmation; a refusal leaves the events, the key and the code untouched;
-  - an unbound phone whose key has failed repeatedly offers a confirmed "reset
-    device key", so recovery no longer needs a reinstall.
-
-  Deployed to the development stand on 2026-09-24 without a schema change,
-  handset first; the live binding, its key and the money state were unchanged.
-  Two live checks were run on isolated probe applications and a temporary
-  device rather than on the live binding: on the tested handset, clearing app
-  data removes the app's key-store keys (an earlier assumption said it did
-  not), and the retired-key refusal, discard and re-binding worked end to end
-  with no critical alert. Criteria: 17 of 17.
-- **Its implementation:** head `bab2986`; `v2` run `35938820508` on that exact
-  head, **success** across all three jobs. The closeout commit that follows
-  touches documentation only.
+- **Completed task:** `049-device-requisite-authorization-gaps` — the
+  authorisation and validation gaps inherited from the legacy platform on some
+  device and requisite routes, carried on purpose since the porting phase, are
+  closed under four owner decisions: a team lead reads only what belongs to
+  their own referrals; a trader's write to another trader's object answers
+  exactly as a write to a missing one, so it discloses neither existence nor
+  content; the field rules the legacy requests declared but never enforced are
+  enforced, without inventing new ones and without locking edits of existing
+  records; and the administrator address restriction now applies on every
+  request of the support administrator's surface, not only at sign-in.
+  Deployed to the development stand on 2026-09-24 without a schema change; the
+  phone, the custody exchange and the money state were unchanged. The role
+  behaviour was proven by integration tests and CI, not exercised live - the
+  stand has no users of the affected roles, and no account was created or
+  altered for it. Criteria: all passed.
+- **Its implementation:** head `04bae80`; `v2` run `35956932107` on that exact
+  head, **success** across all three jobs. The closeout commits that follow
+  touch documentation only.
+- **Implemented, not closed:** `048-production-config-fail-closed` — a production
+  or staging configuration now refuses to start when mandatory infrastructure
+  or settings are missing, instead of silently running in an incomplete or
+  development mode, and it reports the loss of a required dependency after
+  start. Two inherited degradations of authentication controls were removed
+  for production by owner decision; the development stand keeps the inherited
+  behaviour on purpose. Deployed to the development stand (Web only) on
+  2026-09-24. The task is **not closed**: **one criterion stays open** - the behaviour against real
+  production infrastructure has not been checked, and tests on isolated
+  processes are not that check. The custody side was not updated on the stand;
+  its compatibility with the new build is not yet confirmed and is checked
+  before its next update. Head `f31a2fc`, `v2` run `35950482699` success.
+- **Previously completed:** `047-device-key-lifecycle` — a key a device has
+  retired is not accepted again by a fresh enrollment code, a transient
+  key-store or network failure never destroys a key, bank events left from a
+  previous binding are never sent under a new one without the person's explicit
+  confirmation, and a stuck unbound phone offers a confirmed key reset.
+  Deployed to the development stand on 2026-09-24; criteria 17 of 17. Head
+  `bab2986`, `v2` run `35938820508` success.
 - **Previously completed:** `046-device-offline-recovery` — after an automatic
   offline switch-off the server now remembers what it switched off, and when
   the phone is back the panel offers to return exactly that, one click per
@@ -328,7 +337,10 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `047-device-key-lifecycle` is CLOSED, and so are
+- **Current/next task:** `049-device-requisite-authorization-gaps` is CLOSED;
+  `048-production-config-fail-closed` is implemented and deployed to the
+  development stand but not closed, awaiting its real-infrastructure
+  criterion; `047-device-key-lifecycle` is CLOSED, and so are
   `046-device-offline-recovery`,
   `045-bank-source-and-name-catalogue` (in its autonomous part),
   `044-blocking-notice-classification`,
@@ -341,8 +353,10 @@ disconnects.
   separate pre-production tasks listed at the end of this file. The real
   parser corpus waits for the external gate. The task proving which deal a
   bank payment belongs to is only PARTLY DONE: its autonomous part is closed,
-  and its remainder waits for the real corpus. No other item there has
-  started. By owner decision each is a bounded task of its own, none starts
+  and its remainder waits for the real corpus. The carried authorisation gaps
+  are closed (`049`); the production-configuration item is implemented
+  (`048`) and waits only for its check against real infrastructure. No other
+  item there has started. By owner decision each is a bounded task of its own, none starts
   automatically, and none of them is a production deployment.
 - **Nothing breaks at the switch any more.** Device self-update was fixed in the
   cutover preparation; the merchant dashboard cards that could only go blank -
@@ -362,7 +376,8 @@ disconnects.
   production readiness, listed at the end of this file - among them proving which
   deal a bank payment belongs to - plus two records there that the owner
   deliberately did not declare mandatory. The payment-attribution task's
-  remainder cannot start before real bank messages exist. No further
+  remainder cannot start before real bank messages exist. Tasks `048` and
+  `049` are done (`048` except its real-infrastructure check); no other
   pre-production task has been started, and none starts by itself.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
@@ -798,16 +813,15 @@ Completed architecture/specification milestones:
   defect-fix list covers only deals, requisites, the ledger and withdrawals.
 
 - Phase 006 added its own list of deliberately carried quirks, each pinned by a
-  test. They span three kinds: **authorisation gaps inherited from the legacy
-  platform on some device and requisite routes**, input validation that is
-  weaker at bind time than the field definitions suggest, and cosmetic
-  inconsistencies in responses and counts. Each one is enumerated, with its
-  route and its effect, in the private specification; they are not restated here,
-  because a public list of where an ownership check is missing is a map rather
-  than a note. Two things matter publicly: **these are carried on purpose and
-  are open technical debt, not a solved problem**, and removing any of them
-  without the owner's decision is a defect rather than a cleanup. Closing them
-  is pre-production work and is listed as such at the end of this file.
+  test. They spanned three kinds: authorisation gaps inherited from the legacy
+  platform on some device and requisite routes, input validation weaker at
+  bind time than the field definitions suggest, and cosmetic inconsistencies in
+  responses and counts. **The authorisation gaps and the bind-time validation
+  are closed** by task `049`, under owner decisions. The cosmetic
+  inconsistencies, and a few recorded behaviours that are not authorisation
+  questions, remain as carried; each is enumerated in the private
+  specification, and removing one without the owner's decision is still a
+  defect rather than a cleanup.
 - The audit path never serializes a whole row. It writes an explicit allowlist
   of safe columns, and a test proves password hashes, MFA secrets and unconsumed
   invite codes never reach the audit table. Do not "simplify" it into a row
@@ -822,11 +836,11 @@ Completed architecture/specification milestones:
   behaviour when that configuration is absent is not uniformly the same as when
   it is present and healthy. Which direction each one takes, and under what
   conditions, is recorded in the private repository and is not published here.
-  What belongs in a restart checkpoint is the obligation: **a production
-  configuration must be validated to fail closed**, that validation is a
-  mandatory part of the pre-production work listed at the end of this file, and
-  it has not been done. Treating any of it as already safe because a stand
-  behaved well is the mistake this note exists to prevent.
+  Task `048` made a production configuration refuse to start without them and
+  removed the silent degradations there, by owner decision; the development
+  stand keeps the inherited behaviour on purpose. What is still open is the
+  check against **real production infrastructure**: tests on isolated processes
+  are not that check, and a stand behaving well is not either.
 - Replacing the legacy request filter moved where input limits and character
   rules are enforced, and the set of refusal responses on the authentication
   routes changed with it. Per-account lockout and route rate limiting remain.
@@ -1229,8 +1243,9 @@ repository.
 ## Required before production
 
 These are outside the financial-redesign scope but must not be forgotten. None
-of them is a production deployment. None has been executed; several are written
-down and agreed as mandatory, which is a different thing from having been run:
+of them is a production deployment. Most have not been executed; several are
+written down and agreed as mandatory, which is a different thing from having
+been run. Where one has been done, it says so below:
 
 - **A mandatory external validation gate, and none of it has been run.** Four
   checks cannot be performed without someone or something outside the project,
@@ -1294,17 +1309,16 @@ down and agreed as mandatory, which is a different thing from having been run:
   closed: why the server side once failed to record heartbeats is not
   established, and a silent phone keeps receiving new deals until the offline
   threshold passes - existing behaviour that task did not change.
-- **Validate that a production configuration fails closed, and close the carried
-  authorisation gaps.** Two related pieces of open technical debt, both inherited
-  from the legacy platform rather than introduced by the rewrite. First, parts of
-  the authentication hardening depend on external infrastructure and on deployment
-  configuration being present, and the behaviour when it is absent is not uniformly
-  the safe one; a production configuration must therefore be checked to fail closed
-  rather than assumed to, and a stand behaving well is not that check. Second, a set
-  of legacy authorisation and validation gaps on some device and requisite routes is
-  carried deliberately, pinned by tests, and still open; each is enumerated in the
-  private repository, and closing them is an owner decision rather than a cleanup
-  anyone may do in passing. Neither has been done.
+- **Validate the production configuration against real infrastructure.** The
+  configuration half of the former "fail closed" item is implemented (`048`):
+  a production configuration refuses to start without mandatory
+  infrastructure and settings, and reports a lost dependency after start. What
+  remains is running that behaviour against the real production infrastructure;
+  tests on isolated processes do not count as that check, and it has not been
+  done. The custody side's compatibility with the new build must also be
+  confirmed before it is next updated. The carried authorisation gaps on device
+  and requisite routes that formed the second half of the item are closed
+  (`049`).
 - **The web client's linter does not run at all, and must before production.**
   It aborts while loading one of its own rules and therefore checks nothing;
   the breakage predates the task that found it and was not caused by it. Fixing
