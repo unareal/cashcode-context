@@ -76,7 +76,19 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `050-frontend-lint-restoration` — the web client's linter
+- **Completed task:** `051-trader-fee-replacement-atomicity` — saving a
+  trader's individual fee schedule is now one unit: either the whole new
+  schedule applies or the previous one stays exactly as it was, and resetting a
+  trader to the default schedule is one unit too. Concurrent changes to the
+  fee schedule of one trader or one merchant are serialised and no longer mix.
+  Fee rules, range checks, roles and the API are unchanged, and deals already
+  created are not affected, because a deal's fee is fixed when it is created.
+  Deployed to the development stand (Web only) on 2026-09-24 without a schema
+  change; the phone, the custody exchange, the money state and the fee tables
+  were unchanged. Atomicity and serialisation were proven by integration tests
+  and CI, not exercised live - that would have meant changing tariffs. Head
+  `93c16a2`; `v2` run `35966255496`, **success**.
+- **Previously completed:** `050-frontend-lint-restoration` — the web client's linter
   runs again and checks the code. It had been aborting on its first file
   because of an incompatible pair of pinned tooling versions; one of them was
   moved within its declared range, the production build stayed byte-identical,
@@ -351,7 +363,8 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `050-frontend-lint-restoration` and
+- **Current/next task:** `051-trader-fee-replacement-atomicity`,
+  `050-frontend-lint-restoration` and
   `049-device-requisite-authorization-gaps` are CLOSED;
   `048-production-config-fail-closed` is implemented and deployed to the
   development stand but not closed, awaiting its real-infrastructure
@@ -391,10 +404,10 @@ disconnects.
   production readiness, listed at the end of this file - among them proving which
   deal a bank payment belongs to - plus two records there that the owner
   deliberately did not declare mandatory. The payment-attribution task's
-  remainder cannot start before real bank messages exist. Tasks `048`, `049`
-  and `050` are done (`048` except its real-infrastructure check); the new
-  mandatory fee-schedule atomicity item found by `050` has not been started, and no pre-production
-  task starts by itself.
+  remainder cannot start before real bank messages exist. Tasks `048` to `051`
+  are done (`048` except its real-infrastructure check); the new mandatory
+  item about the default fee schedule, found by `051`, has not been started,
+  and no pre-production task starts by itself.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
   production secrets.
@@ -1338,14 +1351,17 @@ been run. Where one has been done, it says so below:
   confirmed before it is next updated. The carried authorisation gaps on device
   and requisite routes that formed the second half of the item are closed
   (`049`).
-- **A fee-schedule save can leave a partial schedule - mandatory, not started.**
-  Found by `050`: the server-side replacement of a trader's individual fee
-  schedule is not atomic, so a failure part-way through a save can leave the
-  schedule partially applied. The client-side check restored by `050` narrows
-  how often that is reached; it does not close it. It is recorded as mandatory
+- **Concurrent edits of the default fee schedule - mandatory, not started.**
+  Found by the audit of `051` and registered by owner decision: concurrent
+  writes to the default fee schedule are not serialised, so the rule that its
+  ranges must not overlap can be broken under concurrency and the fee of new
+  deals can then be taken from an unintended range. It is recorded as mandatory
   before production readiness and has not been started. (The former item about
-  the web client's linter is closed by `050`, with its historical findings
-  recorded as a baseline rather than fixed.)
+  a partially applied individual fee schedule is closed by `051`; a related
+  residual risk stays documented: concurrent schedule changes for two
+  different merchants can fail and roll back completely, without partial
+  state. The former item about the web client's linter is closed by `050`,
+  with its historical findings recorded as a baseline rather than fixed.)
 - **Recorded, and deliberately NOT declared mandatory by the owner:** the
   structural check that protects the blocking rule is a fence rather than a
   proof. Two independent adversarial passes found ways past it; all but one were
