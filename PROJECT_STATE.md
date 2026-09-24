@@ -76,7 +76,17 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed task:** `053-merchant-bank-fee-concurrency` — concurrent edits
+- **Developed, awaiting deployment:** `054-bank-fee-update-lost-row` - an
+  administrator's edit of a merchant's bank-specific fee that another
+  administrator deletes at the same moment now answers "not found" instead of
+  reporting success; nothing is written. Fee rules, roles, the API contract
+  and existing deals are unchanged, no money is involved. Proven by
+  integration tests that fail without the change and by CI; **not deployed
+  to the development stand**, which needs a separate owner authorisation.
+  Head `ad0eac4`; `v2` run `35989725410` (at `66b2853`), **success**. The same autonomous cycle
+  checked the remaining pre-production register against the code (see the
+  end of this file) and prepared owner questions; no other code changed.
+- **Last completed and deployed:** `053-merchant-bank-fee-concurrency` — concurrent edits
   of a merchant's bank-specific fee ranges are serialised, so two overlapping
   ranges of one merchant can no longer both be accepted. A bounded review of
   the remaining fee writes tied to the same non-overlap rule found no other
@@ -386,7 +396,9 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `053-merchant-bank-fee-concurrency`,
+- **Current/next task:** `054-bank-fee-update-lost-row` is developed and
+  awaits deployment to the development stand (separate owner authorisation);
+  `053-merchant-bank-fee-concurrency`,
   `052-default-fee-grid-concurrency`,
   `051-trader-fee-replacement-atomicity`,
   `050-frontend-lint-restoration` and
@@ -424,7 +436,8 @@ disconnects.
   live run happened on a test network with test funds, on a disposable private
   stand, under an authorisation that explicitly excluded production, mainnet and
   production secrets.
-- **Next action:** no task in flight, and several things are outstanding that
+- **Next action:** no task is being implemented (`054` only awaits a deployment
+  authorisation), and several things are outstanding that
   are not optional. The mandatory external validation gate below now holds
   four checks and none of them has been run; production readiness cannot be
   declared until all four are. Further items are recorded as mandatory before
@@ -432,8 +445,11 @@ disconnects.
   deal a bank payment belongs to - plus two records there that the owner
   deliberately did not declare mandatory. The payment-attribution task's
   remainder cannot start before real bank messages exist. Tasks `048` to `053`
-  are done (`048` except its real-infrastructure check), and no pre-production
-  task starts by itself.
+  are done (`048` except its real-infrastructure check); `054` is developed
+  and waits for deployment; no pre-production task starts by itself. An
+  autonomous review of the register on 2026-09-24 found no mandatory item that
+  can be completed without an owner decision, external data or real
+  infrastructure; the owner questions it prepared are pending.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
   production secrets.
@@ -1328,6 +1344,11 @@ been run. Where one has been done, it says so below:
   who may see them before anonymisation and how the originals are kept, which
   banks are needed and how many samples are enough are owner decisions taken
   before that session, not now.
+- **How a bank payment's currency is used when the payment is matched
+  to a deal - mandatory, open.** It was recorded as mandatory by the parser-corpus task
+  but had dropped out of the tracked list; it is registered again. It needs
+  an owner decision, and the parser fix it depends on waits for the real
+  corpus.
 - **Parser regression tests: infrastructure done, real corpus absent.** Both
   parsers are now under test against a shared corpus, but every sample in it
   is engineered or of unknown origin; **real samples: 0**. Writing a
@@ -1378,11 +1399,9 @@ been run. Where one has been done, it says so below:
   and requisite routes that formed the second half of the item are closed
   (`049`).
 - (The former item about concurrent edits of a merchant's bank-specific fees
-  is closed by `053`; a separate, pre-existing defect it recorded stays open:
-  in a narrow case an administrator's edit of a bank-specific fee can be
-  reported as successful although that fee no longer exists. The fee is not
-  restored, no money moves and existing deals are unaffected; only the answer
-  is wrong. The former item about concurrent edits of the default fee schedule
+  is closed by `053`; a separate, pre-existing defect it recorded - an
+  answer wrongly reporting success, with no money effect - is fixed in code
+  by `054`, not yet deployed. The former item about concurrent edits of the default fee schedule
   is closed by `052`. The former item about
   a partially applied individual fee schedule is closed by `051`; a related
   residual risk stays documented: concurrent schedule changes for two
@@ -1405,6 +1424,8 @@ been run. Where one has been done, it says so below:
 - Design how production unseals its secret store and where that material lives.
   It must not sit on the same host as the data it protects, which is what the
   disposable stand does deliberately and what production must not inherit.
+  The same design must also settle how the custody service's own access to
+  that store stays valid over time; this is not decided yet.
 - Decide whether the device application's server address must be changeable
   without a rebuild, or accept that every environment keeps its own signed
   artifact. The secret half of this item is gone: there is no longer an
