@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-09-24
+Last updated: 2026-09-26
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -76,17 +76,38 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Developed, awaiting deployment:** `054-bank-fee-update-lost-row` - an
+- **Developed, awaiting deployment:** `056-rub-only-bank-events`, part A -
+  by owner decision the platform serves only rouble deals and payments. A bank
+  event that reports another currency, from the phone or from the SMS-box
+  channel, no longer confirms a deal: it is recorded with its own outcome for
+  review. The parsers' currency detection was tightened and the phone now
+  reports more about what it recognised. Some cases are not yet covered by
+  the rouble-only rule; they remain an open, owner-level item (part B,
+  blocked on owner questions) and are tracked in the register at the end of
+  this file. Proven by unit and
+  integration tests and by a mechanical comparison of the old and new parsers
+  over every test message - engineered messages only, no real bank message
+  exists yet. **Not deployed**: it needs a database migration on the
+  development stand and a new phone build, each under a separate owner
+  authorisation. Head `cbc08d4`; `v2` run `36195178899`, `frontend` run
+  `36195179029`, **success**.
+- **Also in this cycle:** a question about when a device's pending
+  requisites become active was closed by owner decision with the existing
+  behaviour kept; the custody side's secret-store access lifetime was examined
+  read-only (outcome recorded privately; the production design item below
+  covers it).
+- **Last completed and deployed:** `054-bank-fee-update-lost-row` - an
   administrator's edit of a merchant's bank-specific fee that another
   administrator deletes at the same moment now answers "not found" instead of
   reporting success; nothing is written. Fee rules, roles, the API contract
-  and existing deals are unchanged, no money is involved. Proven by
-  integration tests that fail without the change and by CI; **not deployed
-  to the development stand**, which needs a separate owner authorisation.
-  Head `ad0eac4`; `v2` run `35989725410` (at `66b2853`), **success**. The same autonomous cycle
-  checked the remaining pre-production register against the code (see the
-  end of this file) and prepared owner questions; no other code changed.
-- **Last completed and deployed:** `053-merchant-bank-fee-concurrency` — concurrent edits
+  and existing deals are unchanged, no money is involved. Deployed to the
+  development stand (Web only) on 2026-09-25 without a schema change; the
+  phone, the custody exchange, the money state and the fee tables were
+  unchanged. Proven by integration tests that fail without the change and by
+  CI - the race itself was not exercised live, which would have meant
+  changing tariffs. Head `ad0eac4`; `v2` run `35989725410` (at `66b2853`),
+  **success**.
+- **Previously completed:** `053-merchant-bank-fee-concurrency` — concurrent edits
   of a merchant's bank-specific fee ranges are serialised, so two overlapping
   ranges of one merchant can no longer both be accepted. A bounded review of
   the remaining fee writes tied to the same non-overlap rule found no other
@@ -396,8 +417,9 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `054-bank-fee-update-lost-row` is developed and
-  awaits deployment to the development stand (separate owner authorisation);
+- **Current/next task:** `056-rub-only-bank-events` part A is developed and
+  awaits deployment (separate owner authorisations), part B waits for owner
+  answers; `054-bank-fee-update-lost-row`,
   `053-merchant-bank-fee-concurrency`,
   `052-default-fee-grid-concurrency`,
   `051-trader-fee-replacement-atomicity`,
@@ -436,20 +458,19 @@ disconnects.
   live run happened on a test network with test funds, on a disposable private
   stand, under an authorisation that explicitly excluded production, mainnet and
   production secrets.
-- **Next action:** no task is being implemented (`054` only awaits a deployment
-  authorisation), and several things are outstanding that
+- **Next action:** no task is being implemented (`056` part A only awaits
+  deployment authorisations), and several things are outstanding that
   are not optional. The mandatory external validation gate below now holds
   four checks and none of them has been run; production readiness cannot be
   declared until all four are. Further items are recorded as mandatory before
   production readiness, listed at the end of this file - among them proving which
   deal a bank payment belongs to - plus two records there that the owner
   deliberately did not declare mandatory. The payment-attribution task's
-  remainder cannot start before real bank messages exist. Tasks `048` to `053`
-  are done (`048` except its real-infrastructure check); `054` is developed
-  and waits for deployment; no pre-production task starts by itself. An
-  autonomous review of the register on 2026-09-24 found no mandatory item that
-  can be completed without an owner decision, external data or real
-  infrastructure; the owner questions it prepared are pending.
+  remainder cannot start before real bank messages exist. Tasks `048` to `054`
+  are done (`048` except its real-infrastructure check); `056` part A is
+  developed and waits for deployment; no pre-production task starts by
+  itself. The remaining owner questions from the autonomous cycles of
+  2026-09-24/26 are pending.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
   production secrets.
@@ -1345,9 +1366,12 @@ been run. Where one has been done, it says so below:
   banks are needed and how many samples are enough are owner decisions taken
   before that session, not now.
 - **How a bank payment's currency is used when the payment is matched
-  to a deal - mandatory, open.** It was recorded as mandatory by the parser-corpus task
-  but had dropped out of the tracked list; it is registered again. It needs
-  an owner decision, and the parser fix it depends on waits for the real
+  to a deal - mandatory, partly done.** The owner decided the platform serves
+  roubles only. The part that needs no further decision is developed (`056`
+  part A, not yet deployed). Still open: some categories of bank event are
+  not yet covered by the rouble-only rule and follow the previous path until
+  the owner answers the pending questions; the platform therefore does not
+  yet fully meet that decision. The answers depend partly on the real
   corpus.
 - **Parser regression tests: infrastructure done, real corpus absent.** Both
   parsers are now under test against a shared corpus, but every sample in it
@@ -1400,8 +1424,8 @@ been run. Where one has been done, it says so below:
   (`049`).
 - (The former item about concurrent edits of a merchant's bank-specific fees
   is closed by `053`; a separate, pre-existing defect it recorded - an
-  answer wrongly reporting success, with no money effect - is fixed in code
-  by `054`, not yet deployed. The former item about concurrent edits of the default fee schedule
+  answer wrongly reporting success, with no money effect - is fixed by `054`,
+  deployed to the development stand on 2026-09-25. The former item about concurrent edits of the default fee schedule
   is closed by `052`. The former item about
   a partially applied individual fee schedule is closed by `051`; a related
   residual risk stays documented: concurrent schedule changes for two
