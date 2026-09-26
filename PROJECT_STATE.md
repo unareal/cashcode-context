@@ -76,36 +76,49 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Current stage: preparing the first production deployment, which has NOT
-  been performed.** Production is deployed only on a separate owner
-  permission. The latest cycle stopped looking for new tasks and produced a
-  production-readiness package in the private repository (under
-  `docs/production/`): a register of everything left before production, split
-  into what can be prepared now, what needs production infrastructure, what
-  needs real bank data and phones, and what needs an owner decision; the
-  owner's inventory of machines, names, providers and data to supply; a
-  first-deployment runbook (hosts and sizing from the measured stand,
-  Web/custody separation, dependencies, network, public TLS, the existing
-  mutual TLS between the two services, backup and restore, monitoring,
-  installation and migration order, first administrator, custody bootstrap,
-  TRON, phone build and signing, rollback, smoke tests, go/no-go); an exact
-  scenario for the last open criterion of the fail-closed configuration task,
-  which stays **not passed** until run on real infrastructure; a design with
-  options for unsealing the secret store after a reboot, with a
-  recommendation (not a decision) and a procedure prototype verified on a
-  throwaway instance; a single-session plan for the external validation gate;
-  readiness of the payment-attribution task with a decision tree for what the
-  real bank messages may show; and a decision note on the SMS-box channel.
-  Commands that depend on production values stay templates until the owner
-  supplies them; no production secret was generated.
-- **Task `059` (small production-readiness fixes found on the way) - done.**
-  The reverse-proxy template now actually serves TLS and redirects plain HTTP;
-  the log-relay template runs as an unprivileged user; a non-debug phone build
-  refuses a plain-HTTP server address; the parser-corpus harness can accept
-  real samples (timing fields, mandatory truth fields, per-bank breakdown).
-  No money, permission, contract or schema change; the stand was not touched
-  and needs no deployment. Independent specification and code review, no
-  blocking findings. `v2` CI **success** (run `36220685472`, head `8ca4cbc`).
+- **Current stage: the production-readiness package is complete up to a
+  mandatory stop - the owner's architecture review.** Production has NOT been
+  deployed, no infrastructure has been rented, and nothing proceeds until the
+  owner has gone through a plain-language architecture review in the private
+  repository and explicitly confirmed that they understand and accept the
+  resulting architecture; silence is not consent. The review covers the
+  components, what changed against the legacy system, each machine, where
+  money lives in accounting and where real keys live, deposits, deals, the
+  ledger, withdrawals and the owner's approval step, failures and full
+  reboot, backups, who controls what, the accepted and not-yet-accepted
+  residual risks, what will be rented, and what the external validation gate
+  must still check.
+- **Owner decisions recorded this cycle (final for this stage).** The SMS-box
+  channel is not used in the first production release (kept in code, off on
+  the server). The secret store is unsealed manually by a 2-of-3 threshold,
+  and all three shares - like every other piece of infrastructure and custody
+  control, including release signing - stay with the owner alone; there is
+  no escrow and no third party in the chain of control, and the customer
+  receives application roles only. The custody service's access to the
+  secret store keeps the model already proven on the stand (periodic renewal
+  by a scheduled job) with an alert on failure. Nothing is compiled on
+  production hosts: releases are built elsewhere, pass CI and review, and
+  carry checksums and provenance. The phone app keeps one stable production
+  name compiled in. Money limits stay as they are and will be shown to the
+  customer in one table before launch.
+- **Done this cycle, each with independent specification and code review:**
+  `059` - small production-readiness fixes (TLS in the proxy template, the
+  log relay without root, phone release builds refuse plain HTTP, the parser
+  corpus harness ready for real samples); `060` - the SMS-box channel is
+  switched off on the server fail-closed, so it cannot be activated by
+  bypassing the web client, and production refuses to start with it exposed;
+  the merchant sandbox now returns a working widget address; `061` -
+  second-factor secrets are encrypted and session refresh tokens are stored
+  only as hashes in the web database; `062` - a release bundle script
+  (reproducible service builds, manifest with checksums, CI evidence, offline phone
+  signing by the owner, verification on the target host) and templates for
+  renewing the custody service's access with an alert on failure. `v2` CI
+  **success** for the code changes (runs `36224918616` at `2e3fb8e`,
+  `36226909151` at `04eb6e7`); the last commit `2e67164` is outside the CI
+  path filter. One check was only partly possible here: building the phone
+  release through the script ran out of memory on the development host and is
+  to be repeated on a larger build machine. None of this was deployed to the
+  stand in this cycle; it changes nothing there until the next web release.
 - **Previously completed and deployed:** `056-rub-only-bank-events`, parts A **and B**.
   By owner decision the platform serves only rouble deals and payments. After
   the owner answered the four blocking questions, the rule is now complete: the
@@ -1391,71 +1404,48 @@ repository.
 
 ## Required before production
 
-None of this is a production deployment. Classes: **A** can be prepared now
-in the repository; **B** needs production infrastructure; **C** needs real
-bank messages and phones; **D** needs an owner decision. Class A is done for
-this stage (the package and task `059` above); everything below is B, C or D.
-Deferring an item is not a pass, a waiver or an accepted risk.
+None of this is a production deployment. Classes: **A** can be prepared in the
+repository; **B** needs production infrastructure; **C** needs real bank
+messages and phones; **D** needs an owner decision. Class A is done for this
+stage. Deferring an item is not a pass, a waiver or an accepted risk.
 
-- **Execute the deployment package on real infrastructure (B)**, after the
-  owner supplies the inventory and grants permission. This includes running
-  the fail-closed configuration check of task `048` against the real secret
-  store, cache, database and chain node; until then that criterion is not
-  passed.
-- **Unsealing the secret store and keeping the custody service's access
-  valid (D, then B).** Options are analysed; the recommendation is manual
-  threshold unsealing with offline shares,
-  an independent offline copy of the custody material as the primary disaster
-  path, and external renewal of the service's access. Production must not
-  inherit the stand's arrangement of keeping the unseal material on the same
-  host. Owner decisions pending: scheme, share holders, backup of the store,
-  form of the offline copy, renewal mechanism.
-- **Restore and failover policy that cannot re-bind the whole phone fleet or
-  re-sign an already-signed transfer by accident (D, then B).** A concrete policy is proposed; the owner must accept
-  it.
-- **Build and delivery of release artifacts (D).** Production replaces the
-  stand's build-in-place rule with a verifiable release procedure; proposed,
-  awaiting acceptance.
-- **Phone release signing key (D, then B):** who holds it and signs releases.
-  Losing it means no in-place update is ever possible again.
-- **The device application's server address:** analysed; recommended to keep
-  it compile-time and use one stable production name, so no runtime setting
-  is added. No owner decision needed beyond supplying the name.
-- **External validation gate (C, with owner decisions before the session).**
-  Four checks - a genuine bank notification on a bound handset, restore onto a
-  second physical handset without cloning its identity, handsets from other
-  manufacturers, and a real anonymised corpus of the banks and channels used
-  at launch. They are now packaged as one organised session with prepared
-  procedures and pass criteria; none of it has been run. Real samples in the
-  corpus: 0. Deciding how messages are captured, where originals are kept,
-  and which banks and channels are needed comes first.
-- **Proving which deal a bank payment belongs to (C, then D).** The
-  autonomous part is done; the matching is still not declared safe. Residual
-  risks of confirming a deal a payment was not made for, and of settling one
-  payment twice, stay open. What the real messages show - above all whether
-  they carry a reliable identifier of the bank operation - selects which owner
-  decisions follow; a decision tree is prepared. Related and also dependent
-  on the corpus: which applications may be a source of a payment
-  notification, and whether some rouble payments are wrongly sent to review.
-- **SMS-box channel for the first release (D).** Its signature compatibility
-  with the third-party sender cannot be settled from the repository, and it
-  lacks several protections of the phone channel. Options: switch it off for
-  the first release (a minimal safe switch-off procedure is prepared), keep
-  it as is, or keep it with a separate rework.
-- **Recorded for the owner, not fixed:** an open permission question on
-  creating one device type (owned by the owner; closed by the SMS-box decision
-  if the channel is switched off), a merchant sandbox answer that carries a
-  development address, two second-factor hardening questions (how its secrets
-  are protected at rest, and which roles must use it), and money thresholds
-  inherited from the legacy system.
+- **Owner architecture review (D) - the next mandatory step.** Decisions the
+  owner is asked to take there: which application role the customer uses day
+  to day, given how broad the top administrative role's powers in the panel
+  are; the second-factor policy for each administrative role;
+  where releases are built; the restore and failover policy that must not
+  re-bind the phone fleet or re-sign an already-signed transfer; whether the
+  secret store's storage is backed up or recovery relies on the owner's
+  offline copies.
+- **Execute the deployment package on real infrastructure (B)** after the
+  review and a separate permission, including the fail-closed configuration
+  check of task `048`, which stays **not passed** until run there, and the
+  unseal ceremony.
+- **External validation gate (C).** One organised session with prepared
+  procedures and pass criteria: a genuine bank notification on a bound
+  handset, restore onto a second physical handset without cloning its
+  identity, handsets from other manufacturers, and a real anonymised corpus
+  of the banks and channels used at launch. Not run; real samples: 0. It is
+  not closed with synthetic data and does not block the documentation work;
+  what is needed just before the session is listed.
+- **Proving which deal a bank payment belongs to (C, then D).** The matching
+  is still not declared safe; residual risks of confirming a deal a payment
+  was not made for, and of settling one payment twice, stay open. The
+  decision is taken only after the real messages show what they contain; a
+  decision tree is prepared. The SMS-box channel is not part of it for the
+  first release. Also dependent on the corpus: which applications may be a
+  source of a payment notification, and how many rouble payments are wrongly
+  sent to review.
 - **Recorded, deliberately NOT declared mandatory by the owner:** the
   structural check protecting the blocking rule is a fence rather than a
   proof; an operator refused a forbidden operation on a blocked requisite sees
   the wording of a different refusal.
-- **Recorded and left open by the offline-recovery task, neither closed nor
-  accepted:** a silent phone keeps receiving new deals until the offline
-  threshold passes, and why the server once failed to record heartbeats is not
-  established.
+- **Recorded and left open, neither closed nor accepted:** a silent phone
+  keeps receiving new deals until the offline threshold passes, and why the
+  server once failed to record heartbeats is not established; accounting
+  integrity is enforced by the code rather than by the database; idempotency
+  of withdrawal creation is an open item (every withdrawal still requires the
+  owner's approval). These are listed for the owner's verdict in the review.
 
 ## Update policy
 
