@@ -97,22 +97,19 @@ disconnects.
   of this task and remains open is validating the rule against **real** bank
   messages - that is the external gate below, because a real message cannot be
   injected on the phone. Task closed. `v2` and `frontend` CI **success**.
-- **Also in this cycle - custody host (Crypto VM), still blocked:** two
-  confirmed problems were diagnosed read-only. Deposit discovery has been
-  failing because the service's per-request timeout to the chain node is set far
-  too low - the network path and the node itself are healthy - so raising it is
-  a configuration fix, not a design change. Separately, a credential-lifetime
-  issue on the custody service was found that, left unaddressed, would
-  eventually block that service from restarting. Both fixes require privileged
-  access on the custody host that the working account still does not have; the
-  intended owner setup action has not yet taken effect, so neither fix could be
-  applied or verified this cycle. No custody configuration was changed.
-- **Also in this cycle - divergence-alert false positive (`057`, needs owner
-  decision):** the custody-reconciliation channel raises a false critical
-  divergence alert in a specific reconciliation edge case. A fix is specified,
-  but narrowing what that money-safety channel reports was reserved to the owner
-  by an earlier decision, so it is not implemented and is put to the owner. The
-  real-divergence guarantee is unaffected either way.
+- **Custody host (Crypto VM) - both problems fixed and verified.** After the
+  owner granted the privileged access, two confirmed defects were resolved.
+  (1) Deposit discovery had stopped: a connection-handling defect in the custody
+  service caused scans to stall rather than complete, even though the network and
+  chain node were healthy. It is fixed; on the stand deposit scans now run with
+  zero errors over many cycles. (2) A credential-lifetime issue on the custody
+  service that would eventually have blocked it from restarting is fixed:
+  automatic renewal is in place and verified, and the service restarts cleanly.
+  `v2` CI green.
+- **Divergence-alert false positive (`057`) - fixed (owner-approved).** The
+  owner approved the change; the custody-reconciliation channel no longer raises
+  a false critical alert in that edge case, and the real-divergence guarantee is
+  preserved and tested. Reviewed, `v2` CI green, deployed to the stand.
 - **Also in an earlier cycle - SMS-box channel:** established read-only that the
   channel is switched off on the stand and nothing depends on it, and that
   whether the third-party sender's signature is compatible with the server
@@ -494,11 +491,10 @@ disconnects.
   there that the owner deliberately did not declare mandatory. The
   payment-attribution task's remainder cannot start before real bank messages
   exist. Tasks `048` to `054` are done (`048` except its real-infrastructure
-  check). The two custody-host problems (deposit-scan timeout, unrenewed
-  secret-store token) are diagnosed and wait on one owner setup action for
-  privileged access on that host. No pre-production task starts by itself. The
-  remaining owner questions from the autonomous cycles of 2026-09-24/26 are
-  pending.
+  check). The two custody-host problems (deposit discovery stalling, the
+  unrenewed secret-store credential) are now fixed, deployed and verified on the
+  stand. No pre-production task starts by itself. The remaining owner questions
+  from the autonomous cycles of 2026-09-24/26 are pending.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
   production secrets.
@@ -1451,10 +1447,11 @@ been run. Where one has been done, it says so below:
   infrastructure and settings, and reports a lost dependency after start. What
   remains is running that behaviour against the real production infrastructure;
   tests on isolated processes do not count as that check, and it has not been
-  done. The custody side's compatibility with the new build must also be
-  confirmed before it is next updated. The carried authorisation gaps on device
-  and requisite routes that formed the second half of the item are closed
-  (`049`).
+  done. (The custody service was rebuilt and restarted cleanly on the stand this
+  cycle for the deposit fix, so its build compatibility with the current schema
+  and secret store is confirmed there; the production-infrastructure check
+  remains.) The carried authorisation gaps on device and requisite routes that
+  formed the second half of the item are closed (`049`).
 - (The former item about concurrent edits of a merchant's bank-specific fees
   is closed by `053`; a separate, pre-existing defect it recorded - an
   answer wrongly reporting success, with no money effect - is fixed by `054`,
