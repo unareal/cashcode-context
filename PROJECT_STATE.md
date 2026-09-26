@@ -76,7 +76,37 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Completed and deployed:** `056-rub-only-bank-events`, parts A **and B**.
+- **Current stage: preparing the first production deployment, which has NOT
+  been performed.** Production is deployed only on a separate owner
+  permission. The latest cycle stopped looking for new tasks and produced a
+  production-readiness package in the private repository (under
+  `docs/production/`): a register of everything left before production, split
+  into what can be prepared now, what needs production infrastructure, what
+  needs real bank data and phones, and what needs an owner decision; the
+  owner's inventory of machines, names, providers and data to supply; a
+  first-deployment runbook (hosts and sizing from the measured stand,
+  Web/custody separation, dependencies, network, public TLS, the existing
+  mutual TLS between the two services, backup and restore, monitoring,
+  installation and migration order, first administrator, custody bootstrap,
+  TRON, phone build and signing, rollback, smoke tests, go/no-go); an exact
+  scenario for the last open criterion of the fail-closed configuration task,
+  which stays **not passed** until run on real infrastructure; a design with
+  options for unsealing the secret store after a reboot, with a
+  recommendation (not a decision) and a procedure prototype verified on a
+  throwaway instance; a single-session plan for the external validation gate;
+  readiness of the payment-attribution task with a decision tree for what the
+  real bank messages may show; and a decision note on the SMS-box channel.
+  Commands that depend on production values stay templates until the owner
+  supplies them; no production secret was generated.
+- **Task `059` (small production-readiness fixes found on the way) - done.**
+  The reverse-proxy template now actually serves TLS and redirects plain HTTP;
+  the log-relay template runs as an unprivileged user; a non-debug phone build
+  refuses a plain-HTTP server address; the parser-corpus harness can accept
+  real samples (timing fields, mandatory truth fields, per-bank breakdown).
+  No money, permission, contract or schema change; the stand was not touched
+  and needs no deployment. Independent specification and code review, no
+  blocking findings. `v2` CI **success** (run `36220685472`, head `8ca4cbc`).
+- **Previously completed and deployed:** `056-rub-only-bank-events`, parts A **and B**.
   By owner decision the platform serves only rouble deals and payments. After
   the owner answered the four blocking questions, the rule is now complete: the
   parsers were tightened so that a payment auto-confirms only when it
@@ -1361,134 +1391,71 @@ repository.
 
 ## Required before production
 
-These are outside the financial-redesign scope but must not be forgotten. None
-of them is a production deployment. Most have not been executed; several are
-written down and agreed as mandatory, which is a different thing from having
-been run. Where one has been done, it says so below:
+None of this is a production deployment. Classes: **A** can be prepared now
+in the repository; **B** needs production infrastructure; **C** needs real
+bank messages and phones; **D** needs an owner decision. Class A is done for
+this stage (the package and task `059` above); everything below is B, C or D.
+Deferring an item is not a pass, a waiver or an accepted risk.
 
-- **A mandatory external validation gate, and none of it has been run.** Four
-  checks cannot be performed without someone or something outside the project,
-  and all four are blocking prerequisites for calling the platform
-  production-ready. Deferring them is not a pass, not a waiver and not an
-  accepted risk. The first needs a genuine bank notification to arrive on a
-  bound handset, because only a real message has the real format whose fields
-  must be absent from logs and diagnostics - inventing a plausible one would
-  test an invented format. The second needs a **second physical Android
-  handset**: a backup taken from a bound phone must be restored onto a
-  different device and shown not to carry a working identity across, so the
-  second handset does not become a clone and still requires a normal new
-  binding. An attempt to avoid needing a second handset, by restoring into a
-  secondary profile of the same phone, is recorded and failed outright - it
-  restored nothing at all and therefore proved nothing. The third, added by the
-  device-health task, needs **handsets from other manufacturers**: power
-  management and background restriction are vendor-specific, the project owns
-  one handset, and what it reports says nothing about the rest. The fourth,
-  added by the parser-corpus task, needs **real, anonymised bank messages** from
-  the banks and channels that will actually be used: the test harnesses exist,
-  but the corpus they would validate does not. How the messages are obtained,
-  who may see them before anonymisation and how the originals are kept, which
-  banks are needed and how many samples are enough are owner decisions taken
-  before that session, not now.
-- **How a bank payment's currency is used when the payment is matched
-  to a deal - mandatory, done and deployed.** The owner decided
-  the platform serves roubles only, and after the owner answered the four
-  blocking questions the rule is now complete in code (`056` parts A and B,
-  reviewed): a payment auto-confirms only on an unambiguous rouble indication,
-  and anything else - another currency, an unrecognised currency, or older phone
-  builds - goes to review. Deployed to the stand and closed (phone build first,
-  then server; binding preserved; money state unchanged).
-  Whether to relax the rule for specific proven bank or channel formats stays
-  deferred to after the external validation gate, and depends on the real
-  corpus; an accepted, to-be-measured cost is that some genuine rouble payments
-  may be sent to review by mistake. Validating the rule against real bank
-  messages is part of that external gate, not of this task.
-- **Parser regression tests: infrastructure done, real corpus absent.** Both
-  parsers are now under test against a shared corpus, but every sample in it
-  is engineered or of unknown origin; **real samples: 0**. Writing a
-  plausible-looking corpus and presenting it as coverage stays forbidden, and
-  no parser is declared validated. The engineered run recorded defects in how
-  the parsers classify messages and read their fields, and inconsistencies in
-  how sources and banks are named; they are **recorded privately as mandatory
-  items before production readiness**, some of them folded into the matching
-  task below. Two of them — notifications wrongly read as a block, and the way
-  a source and a bank name are decided — were addressed in code by `044` and
-  `045`, in both cases only against engineered messages; their residual risks
-  are accepted until the real corpus. The others have not been fixed, and none
-  of them is an accepted risk.
-- **Proving which deal a bank payment belongs to — mandatory, partly done.**
-  Durable delivery made one delivered event settle at most once; it did not, and
-  was never meant to, establish that a given payment was made for a given deal.
-  The autonomous part of this task is closed: two open deals of one amount can
-  no longer coexist on one handset, an event that still fits several deals
-  confirms none, and an amount is no longer read as a card number. **The
-  matching is still not declared safe.** Residual risks remain open of a
-  payment confirming a deal it was not made for, and of one payment being
-  settled more than once; they are recorded privately and depend on bank-side
-  facts that no local rule establishes. What remains mandatory: the real
-  anonymised bank messages (gate item G-4) and what they show — above all
-  whether they carry a reliable identifier of the bank operation; if they do
-  not, the matching model itself and its residual risk need a separate owner
-  decision; the owner decision on whether the SMS-box channel keeps automatic
-  confirmation; and an open question about how the platform identifies a
-  recipient across requisites, which today's data cannot answer reliably.
-- **One item the device-health task recorded as mandatory before production
-  readiness, not started:** stand operations, tracked privately. Its other
-  items - durable delivery of bank events, a handset that fell silent and was
-  not returned to service, and the lifetime of a device's key pair - are done.
-  It is not an accepted risk or a waiver. The key-pair task leaves recorded
-  residual risks of its own, among them a possible false critical alert in a
-  narrow re-binding case. Left open by the offline-recovery task and recorded rather than
-  closed: why the server side once failed to record heartbeats is not
-  established, and a silent phone keeps receiving new deals until the offline
-  threshold passes - existing behaviour that task did not change.
-- **Validate the production configuration against real infrastructure.** The
-  configuration half of the former "fail closed" item is implemented (`048`):
-  a production configuration refuses to start without mandatory
-  infrastructure and settings, and reports a lost dependency after start. What
-  remains is running that behaviour against the real production infrastructure;
-  tests on isolated processes do not count as that check, and it has not been
-  done. (The custody service was rebuilt and restarted cleanly on the stand this
-  cycle for the deposit fix, so its build compatibility with the current schema
-  and secret store is confirmed there; the production-infrastructure check
-  remains.) The carried authorisation gaps on device and requisite routes that
-  formed the second half of the item are closed (`049`).
-- (The former item about concurrent edits of a merchant's bank-specific fees
-  is closed by `053`; a separate, pre-existing defect it recorded - an
-  answer wrongly reporting success, with no money effect - is fixed by `054`,
-  deployed to the development stand on 2026-09-25. The former item about concurrent edits of the default fee schedule
-  is closed by `052`. The former item about
-  a partially applied individual fee schedule is closed by `051`; a related
-  residual risk stays documented: concurrent schedule changes for two
-  different merchants can fail and roll back completely, without partial
-  state. The former item about the web client's linter is closed by `050`,
-  with its historical findings recorded as a baseline rather than fixed.)
-- **Recorded, and deliberately NOT declared mandatory by the owner:** the
-  structural check that protects the blocking rule is a fence rather than a
-  proof. Two independent adversarial passes found ways past it; all but one were
-  closed, and the one that remains needs a stronger form of analysis than the
-  check performs today. The rule itself is enforced where the change is written
-  and that enforcement is not affected. It is written down so that the fence is
-  not mistaken for a proof by a later reader.
-- **Not an outstanding action but a known defect, recorded here because this is
-  where a fresh session looks:** an operator refused one of the now-forbidden
-  operations on a blocked requisite is shown the wording of a different refusal.
-  The refusal is correct and the rule holds; only the sentence is wrong. Making
-  the messages contextual is its own task, kept separate so that a text change
-  cannot disturb the rule. The owner did not declare it mandatory.
-- Design how production unseals its secret store and where that material lives.
-  It must not sit on the same host as the data it protects, which is what the
-  disposable stand does deliberately and what production must not inherit.
-  The same design must also settle how the custody service's own access to
-  that store stays valid over time; this is not decided yet.
-- Decide whether the device application's server address must be changeable
-  without a rebuild, or accept that every environment keeps its own signed
-  artifact. The secret half of this item is gone: there is no longer an
-  environment secret inside the artifact to worry about, only the address, and
-  a build that does not supply one now fails rather than defaulting.
-- The residual false-positive class in the divergence alert: a ready command
-  that a claim batch could not carry still raises a critical record every cycle
-  until it is handed over. Invisible below the batch size, visible on a real
-  backlog.
+- **Execute the deployment package on real infrastructure (B)**, after the
+  owner supplies the inventory and grants permission. This includes running
+  the fail-closed configuration check of task `048` against the real secret
+  store, cache, database and chain node; until then that criterion is not
+  passed.
+- **Unsealing the secret store and keeping the custody service's access
+  valid (D, then B).** Options are analysed; the recommendation is manual
+  threshold unsealing with offline shares,
+  an independent offline copy of the custody material as the primary disaster
+  path, and external renewal of the service's access. Production must not
+  inherit the stand's arrangement of keeping the unseal material on the same
+  host. Owner decisions pending: scheme, share holders, backup of the store,
+  form of the offline copy, renewal mechanism.
+- **Restore and failover policy that cannot re-bind the whole phone fleet or
+  re-sign an already-signed transfer by accident (D, then B).** A concrete policy is proposed; the owner must accept
+  it.
+- **Build and delivery of release artifacts (D).** Production replaces the
+  stand's build-in-place rule with a verifiable release procedure; proposed,
+  awaiting acceptance.
+- **Phone release signing key (D, then B):** who holds it and signs releases.
+  Losing it means no in-place update is ever possible again.
+- **The device application's server address:** analysed; recommended to keep
+  it compile-time and use one stable production name, so no runtime setting
+  is added. No owner decision needed beyond supplying the name.
+- **External validation gate (C, with owner decisions before the session).**
+  Four checks - a genuine bank notification on a bound handset, restore onto a
+  second physical handset without cloning its identity, handsets from other
+  manufacturers, and a real anonymised corpus of the banks and channels used
+  at launch. They are now packaged as one organised session with prepared
+  procedures and pass criteria; none of it has been run. Real samples in the
+  corpus: 0. Deciding how messages are captured, where originals are kept,
+  and which banks and channels are needed comes first.
+- **Proving which deal a bank payment belongs to (C, then D).** The
+  autonomous part is done; the matching is still not declared safe. Residual
+  risks of confirming a deal a payment was not made for, and of settling one
+  payment twice, stay open. What the real messages show - above all whether
+  they carry a reliable identifier of the bank operation - selects which owner
+  decisions follow; a decision tree is prepared. Related and also dependent
+  on the corpus: which applications may be a source of a payment
+  notification, and whether some rouble payments are wrongly sent to review.
+- **SMS-box channel for the first release (D).** Its signature compatibility
+  with the third-party sender cannot be settled from the repository, and it
+  lacks several protections of the phone channel. Options: switch it off for
+  the first release (a minimal safe switch-off procedure is prepared), keep
+  it as is, or keep it with a separate rework.
+- **Recorded for the owner, not fixed:** an open permission question on
+  creating one device type (owned by the owner; closed by the SMS-box decision
+  if the channel is switched off), a merchant sandbox answer that carries a
+  development address, two second-factor hardening questions (how its secrets
+  are protected at rest, and which roles must use it), and money thresholds
+  inherited from the legacy system.
+- **Recorded, deliberately NOT declared mandatory by the owner:** the
+  structural check protecting the blocking rule is a fence rather than a
+  proof; an operator refused a forbidden operation on a blocked requisite sees
+  the wording of a different refusal.
+- **Recorded and left open by the offline-recovery task, neither closed nor
+  accepted:** a silent phone keeps receiving new deals until the offline
+  threshold passes, and why the server once failed to record heartbeats is not
+  established.
 
 ## Update policy
 
