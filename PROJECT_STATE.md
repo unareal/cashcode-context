@@ -76,26 +76,44 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Developed, awaiting deployment:** `056-rub-only-bank-events`, part A -
-  by owner decision the platform serves only rouble deals and payments. A bank
-  event that reports another currency, from the phone or from the SMS-box
-  channel, no longer confirms a deal: it is recorded with its own outcome for
-  review. The parsers' currency detection was tightened and the phone now
-  reports more about what it recognised. Some cases are not yet covered by
-  the rouble-only rule; they remain an open, owner-level item (part B,
-  blocked on owner questions) and are tracked in the register at the end of
-  this file. Proven by unit and
-  integration tests and by a mechanical comparison of the old and new parsers
-  over every test message - engineered messages only, no real bank message
-  exists yet. **Not deployed**: it needs a database migration on the
-  development stand and a new phone build, each under a separate owner
-  authorisation. Head `cbc08d4`; `v2` run `36195178899`, `frontend` run
-  `36195179029`, **success**.
-- **Also in this cycle:** a question about when a device's pending
+- **Developed, partly deployed:** `056-rub-only-bank-events`, parts A **and B**.
+  By owner decision the platform serves only rouble deals and payments. After
+  the owner answered the four blocking questions, the rule is now complete: the
+  parsers were tightened so that a payment auto-confirms only when it
+  unambiguously indicates roubles, and any payment that names or implies another
+  currency, an unrecognised currency, or comes from an older phone build is sent
+  to manual review instead of confirming. This holds for both the phone channel
+  and the SMS-box channel. Proven by unit and integration
+  tests and by a mechanical comparison of the old and new parsers over every
+  test message - engineered messages only, no real bank message exists yet -
+  and passed independent specification and code review with no blocking
+  findings. An accepted, to-be-measured cost of the chosen rule is that a
+  minority of genuine rouble payments may be sent to review by mistake; the
+  rate will be measured on the stand before the external validation gate. On
+  the development stand the database migrations are **applied** (the running
+  server was verified healthy against the new schema); still pending, as one
+  paired step, are the new phone build and the server restart - the phone build
+  goes first, and it is waiting only for the stand phone to be reachable for
+  installation. Head `71b2117`; `v2` and `frontend` CI **success** at `8ff0d9c`.
+- **Also in this cycle - custody host (Crypto VM):** two confirmed problems
+  were diagnosed read-only. Deposit discovery has been failing because the
+  service's per-request timeout to the chain node is set far too low - the
+  network path and the node itself are healthy - so raising it is a
+  configuration fix, not a design change. Separately, a credential-lifetime
+  issue on the custody service was found that, left unaddressed, would
+  eventually block that service from restarting. Both fixes require privileged
+  access on the custody host that the working account does not currently have;
+  one owner setup action is needed before
+  either can be applied and verified. No custody configuration was changed.
+- **Also in this cycle - SMS-box channel:** established read-only that the
+  channel is switched off on the stand and nothing depends on it, and that
+  whether the third-party sender's signature is compatible with the server
+  cannot be settled from the repository - it needs the sender's specification
+  or a captured real request. No change was made; its production fate stays an
+  owner decision.
+- **Also in an earlier cycle:** a question about when a device's pending
   requisites become active was closed by owner decision with the existing
-  behaviour kept; the custody side's secret-store access lifetime was examined
-  read-only (outcome recorded privately; the production design item below
-  covers it).
+  behaviour kept.
 - **Last completed and deployed:** `054-bank-fee-update-lost-row` - an
   administrator's edit of a merchant's bank-specific fee that another
   administrator deletes at the same moment now answers "not found" instead of
@@ -417,9 +435,10 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `056-rub-only-bank-events` part A is developed and
-  awaits deployment (separate owner authorisations), part B waits for owner
-  answers; `054-bank-fee-update-lost-row`,
+- **Current/next task:** `056-rub-only-bank-events` parts A and B are developed
+  and reviewed; on the stand the migrations are applied and the phone build plus
+  server restart remain as one paired step waiting for the phone to be reachable;
+  `054-bank-fee-update-lost-row`,
   `053-merchant-bank-fee-concurrency`,
   `052-default-fee-grid-concurrency`,
   `051-trader-fee-replacement-atomicity`,
@@ -458,19 +477,22 @@ disconnects.
   live run happened on a test network with test funds, on a disposable private
   stand, under an authorisation that explicitly excluded production, mainnet and
   production secrets.
-- **Next action:** no task is being implemented (`056` part A only awaits
-  deployment authorisations), and several things are outstanding that
-  are not optional. The mandatory external validation gate below now holds
-  four checks and none of them has been run; production readiness cannot be
-  declared until all four are. Further items are recorded as mandatory before
-  production readiness, listed at the end of this file - among them proving which
-  deal a bank payment belongs to - plus two records there that the owner
-  deliberately did not declare mandatory. The payment-attribution task's
-  remainder cannot start before real bank messages exist. Tasks `048` to `054`
-  are done (`048` except its real-infrastructure check); `056` part A is
-  developed and waits for deployment; no pre-production task starts by
-  itself. The remaining owner questions from the autonomous cycles of
-  2026-09-24/26 are pending.
+- **Next action:** `056` parts A and B are developed, reviewed and half
+  deployed (migrations applied on the stand; phone build and server restart
+  paired and waiting for the phone to be reachable). Several things are
+  outstanding that are not optional. The mandatory external validation gate
+  below now holds four checks and none of them has been run; production
+  readiness cannot be declared until all four are. Further items are recorded
+  as mandatory before production readiness, listed at the end of this file -
+  among them proving which deal a bank payment belongs to - plus two records
+  there that the owner deliberately did not declare mandatory. The
+  payment-attribution task's remainder cannot start before real bank messages
+  exist. Tasks `048` to `054` are done (`048` except its real-infrastructure
+  check). The two custody-host problems (deposit-scan timeout, unrenewed
+  secret-store token) are diagnosed and wait on one owner setup action for
+  privileged access on that host. No pre-production task starts by itself. The
+  remaining owner questions from the autonomous cycles of 2026-09-24/26 are
+  pending.
   PRODUCTION READINESS IS NOT CONFIRMED and PRODUCTION DEPLOYMENT HAS NOT
   STARTED: nothing so far has touched production, its hosts, mainnet or
   production secrets.
@@ -1366,13 +1388,17 @@ been run. Where one has been done, it says so below:
   banks are needed and how many samples are enough are owner decisions taken
   before that session, not now.
 - **How a bank payment's currency is used when the payment is matched
-  to a deal - mandatory, partly done.** The owner decided the platform serves
-  roubles only. The part that needs no further decision is developed (`056`
-  part A, not yet deployed). Still open: some categories of bank event are
-  not yet covered by the rouble-only rule and follow the previous path until
-  the owner answers the pending questions; the platform therefore does not
-  yet fully meet that decision. The answers depend partly on the real
-  corpus.
+  to a deal - mandatory, code complete, deployment partial.** The owner decided
+  the platform serves roubles only, and after the owner answered the four
+  blocking questions the rule is now complete in code (`056` parts A and B,
+  reviewed): a payment auto-confirms only on an unambiguous rouble indication,
+  and anything else - another currency, an unrecognised currency, or older phone
+  builds - goes to review. On the stand the migrations are applied;
+  the phone build and server restart remain paired and pending the phone.
+  Whether to relax the rule for specific proven bank or channel formats stays
+  deferred to after the external validation gate, and depends on the real
+  corpus; an accepted, to-be-measured cost is that some genuine rouble payments
+  may be sent to review by mistake.
 - **Parser regression tests: infrastructure done, real corpus absent.** Both
   parsers are now under test against a shared corpus, but every sample in it
   is engineered or of unknown origin; **real samples: 0**. Writing a
