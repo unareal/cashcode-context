@@ -76,7 +76,7 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
-- **Developed, partly deployed:** `056-rub-only-bank-events`, parts A **and B**.
+- **Completed and deployed:** `056-rub-only-bank-events`, parts A **and B**.
   By owner decision the platform serves only rouble deals and payments. After
   the owner answered the four blocking questions, the rule is now complete: the
   parsers were tightened so that a payment auto-confirms only when it
@@ -85,27 +85,35 @@ disconnects.
   to manual review instead of confirming. This holds for both the phone channel
   and the SMS-box channel. Proven by unit and integration
   tests and by a mechanical comparison of the old and new parsers over every
-  test message - engineered messages only, no real bank message exists yet -
-  and passed independent specification and code review with no blocking
-  findings. An accepted, to-be-measured cost of the chosen rule is that a
-  minority of genuine rouble payments may be sent to review by mistake; the
-  rate will be measured on the stand before the external validation gate. On
-  the development stand the database migrations are **applied** (the running
-  server was verified healthy against the new schema); still pending, as one
-  paired step, are the new phone build and the server restart - the phone build
-  goes first, and it is waiting only for the stand phone to be reachable for
-  installation. Head `71b2117`; `v2` and `frontend` CI **success** at `8ff0d9c`.
-- **Also in this cycle - custody host (Crypto VM):** two confirmed problems
-  were diagnosed read-only. Deposit discovery has been failing because the
-  service's per-request timeout to the chain node is set far too low - the
-  network path and the node itself are healthy - so raising it is a
-  configuration fix, not a design change. Separately, a credential-lifetime
+  test message - engineered messages only - and passed independent
+  specification and code review with no blocking findings. An accepted,
+  to-be-measured cost of the chosen rule is that a minority of genuine rouble
+  payments may be sent to review by mistake; the rate will be measured on the
+  stand before the external validation gate. **Deployed to the development
+  stand:** migrations applied, the new server released, and the new phone build
+  installed first (phone build before server, as required), with the device
+  binding preserved; the updated phone re-connected to the new server, its
+  event queue empty with no losses, and money state unchanged. What is NOT part
+  of this task and remains open is validating the rule against **real** bank
+  messages - that is the external gate below, because a real message cannot be
+  injected on the phone. Task closed. `v2` and `frontend` CI **success**.
+- **Also in this cycle - custody host (Crypto VM), still blocked:** two
+  confirmed problems were diagnosed read-only. Deposit discovery has been
+  failing because the service's per-request timeout to the chain node is set far
+  too low - the network path and the node itself are healthy - so raising it is
+  a configuration fix, not a design change. Separately, a credential-lifetime
   issue on the custody service was found that, left unaddressed, would
   eventually block that service from restarting. Both fixes require privileged
-  access on the custody host that the working account does not currently have;
-  one owner setup action is needed before
-  either can be applied and verified. No custody configuration was changed.
-- **Also in this cycle - SMS-box channel:** established read-only that the
+  access on the custody host that the working account still does not have; the
+  intended owner setup action has not yet taken effect, so neither fix could be
+  applied or verified this cycle. No custody configuration was changed.
+- **Also in this cycle - divergence-alert false positive (`057`, needs owner
+  decision):** the custody-reconciliation channel raises a false critical
+  divergence alert in a specific reconciliation edge case. A fix is specified,
+  but narrowing what that money-safety channel reports was reserved to the owner
+  by an earlier decision, so it is not implemented and is put to the owner. The
+  real-divergence guarantee is unaffected either way.
+- **Also in an earlier cycle - SMS-box channel:** established read-only that the
   channel is switched off on the stand and nothing depends on it, and that
   whether the third-party sender's signature is compatible with the server
   cannot be settled from the repository - it needs the sender's specification
@@ -435,10 +443,9 @@ disconnects.
   command-line tools, and the rule that a node's "found" is never trusted
   before a body has been verified against the signed intent. Head `caf80ad`
   on `232097b`; `v2` run `33986241821`, **success** across all three jobs.
-- **Current/next task:** `056-rub-only-bank-events` parts A and B are developed
-  and reviewed; on the stand the migrations are applied and the phone build plus
-  server restart remain as one paired step waiting for the phone to be reachable;
-  `054-bank-fee-update-lost-row`,
+- **Current/next task:** `056-rub-only-bank-events` parts A and B are developed,
+  reviewed and **deployed to the stand and closed** (phone build first, then
+  server; binding preserved; money state unchanged); `054-bank-fee-update-lost-row`,
   `053-merchant-bank-fee-concurrency`,
   `052-default-fee-grid-concurrency`,
   `051-trader-fee-replacement-atomicity`,
@@ -477,9 +484,8 @@ disconnects.
   live run happened on a test network with test funds, on a disposable private
   stand, under an authorisation that explicitly excluded production, mainnet and
   production secrets.
-- **Next action:** `056` parts A and B are developed, reviewed and half
-  deployed (migrations applied on the stand; phone build and server restart
-  paired and waiting for the phone to be reachable). Several things are
+- **Next action:** `056` parts A and B are developed, reviewed and **deployed to
+  the stand and closed**. Several things are
   outstanding that are not optional. The mandatory external validation gate
   below now holds four checks and none of them has been run; production
   readiness cannot be declared until all four are. Further items are recorded
@@ -1388,17 +1394,18 @@ been run. Where one has been done, it says so below:
   banks are needed and how many samples are enough are owner decisions taken
   before that session, not now.
 - **How a bank payment's currency is used when the payment is matched
-  to a deal - mandatory, code complete, deployment partial.** The owner decided
+  to a deal - mandatory, done and deployed.** The owner decided
   the platform serves roubles only, and after the owner answered the four
   blocking questions the rule is now complete in code (`056` parts A and B,
   reviewed): a payment auto-confirms only on an unambiguous rouble indication,
   and anything else - another currency, an unrecognised currency, or older phone
-  builds - goes to review. On the stand the migrations are applied;
-  the phone build and server restart remain paired and pending the phone.
+  builds - goes to review. Deployed to the stand and closed (phone build first,
+  then server; binding preserved; money state unchanged).
   Whether to relax the rule for specific proven bank or channel formats stays
   deferred to after the external validation gate, and depends on the real
   corpus; an accepted, to-be-measured cost is that some genuine rouble payments
-  may be sent to review by mistake.
+  may be sent to review by mistake. Validating the rule against real bank
+  messages is part of that external gate, not of this task.
 - **Parser regression tests: infrastructure done, real corpus absent.** Both
   parsers are now under test against a shared corpus, but every sample in it
   is engineered or of unknown origin; **real samples: 0**. Writing a
