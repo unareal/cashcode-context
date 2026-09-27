@@ -1477,16 +1477,25 @@ repository; **B** needs production infrastructure; **C** needs real bank
 messages and phones; **D** needs an owner decision. Class A is done for this
 stage. Deferring an item is not a pass, a waiver or an accepted risk.
 
-- **Next stage: the external validation gate (C) - prepared, not started.**
-  The owner took all decisions for the session on 2026-09-27 (how real
-  messages are captured and handled, the first set of banks and channels, the
-  sample threshold, how real transfers are made, what counts as closing the
-  delayed-notification check, which other phone makers, whether to trigger a
-  reversible card block, and a pre-collection window). A session toolkit is
-  in place (task `068`: read-only capture, programmatic anonymisation into
-  the corpus, promotion into the repository only after a recorded second-person
-  review).
-  Real operations start only after the owner confirms the session date.
+- **Priority changed (owner, 2026-09-27): reach a limited test-production
+  (canary) as soon as possible and keep developing alongside real, gradual
+  operation.** Money invariants are not relaxed; the register lists no known
+  open defect of the kind that could lose funds, repeat a withdrawal, sign an
+  unauthorised transfer, break the ledger or holds, let the web side sign a
+  custody operation, bypass the owner's approval, mix up device identities,
+  or accept an unknown currency as roubles. The pre-production work is now
+  split into hard blockers, post-launch validation and optional items. The
+  external validation gate is cut to a minimal check of the real bank path on
+  the existing phone (a real notice arrives and reaches the server, is
+  classified correctly, a strict rouble payment confirms a test deal, a
+  non-matching message does not confirm a wrong deal, no obvious leak of the
+  message text into ordinary logs, and one anonymised real sample enters the
+  test corpus). A second phone, other phone makers, the full corpus and a
+  full recovery rehearsal move to post-launch validation. Hard blockers now:
+  that minimal check, provisioning the infrastructure, the owner's secrets
+  ceremony, the first signed release, the fail-closed configuration check on
+  real infrastructure (not passed until run there), backups verified, and a
+  minimal smoke test. Production still needs a separate owner permission.
 - **Execute the deployment package on real infrastructure (B)** after a
   separate permission, including the fail-closed configuration
   check of task `048`, which stays **not passed** until run there, and the
