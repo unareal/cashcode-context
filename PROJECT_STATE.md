@@ -88,6 +88,20 @@ disconnects.
   reboot, backups, who controls what, the accepted and not-yet-accepted
   residual risks, what will be rented, and what the external validation gate
   must still check.
+- **Task `064` (owner decisions 2026-09-27) - done and verified on the
+  stand.** Invitations can no longer grant a privileged panel role: such
+  invitations are refused when created and, for any stored earlier, at
+  registration, on the server. Privileged accounts are created only through
+  the explicit administrative path (and the first administrator by the owner
+  on the host). The owner is now also notified of privileged accounts'
+  second-factor enrolment and removal, creation, status changes, deletion,
+  and automatic blocking after too many failed passwords, through the same
+  relay, with only operational context. Independent specification and code
+  review; `v2` and `frontend` CI **success** (runs `36293595112`,
+  `36293595199` at `2d89ab2`). Deployed to the stand; a live check delivered the tested notices (automatic blocking and
+  enrolment are covered by tests only); temporary test accounts and settings
+  were removed. Further access-control questions remain with the owner (see the
+  owner architecture review below).
 - **Task `063` (owner requirement 2026-09-27) - done and verified on the
   stand.** Every new successful interactive login of a privileged panel role
   (the roles that are subject to the administrative address check) now sends
@@ -1431,8 +1445,7 @@ stage. Deferring an item is not a pass, a waiver or an accepted risk.
   where releases are built; the restore and failover policy that must not
   re-bind the phone fleet or re-sign an already-signed transfer; whether the
   secret store's storage is backed up or recovery relies on the owner's
-  offline copies; and one further access-control policy question found by task
-  `063` (owner decision pending).
+  offline copies; and who may create privileged accounts.
 - **Execute the deployment package on real infrastructure (B)** after the
   review and a separate permission, including the fail-closed configuration
   check of task `048`, which stays **not passed** until run there, and the
