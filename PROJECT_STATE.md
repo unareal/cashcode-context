@@ -1477,9 +1477,16 @@ repository; **B** needs production infrastructure; **C** needs real bank
 messages and phones; **D** needs an owner decision. Class A is done for this
 stage. Deferring an item is not a pass, a waiver or an accepted risk.
 
-- **Next stage: the external validation gate (C).** No owner decision blocks
-  it; the choices needed just before the session are listed in the prepared
-  package.
+- **Next stage: the external validation gate (C) - prepared, not started.**
+  The owner took all decisions for the session on 2026-09-27 (how real
+  messages are captured and handled, the first set of banks and channels, the
+  sample threshold, how real transfers are made, what counts as closing the
+  delayed-notification check, which other phone makers, whether to trigger a
+  reversible card block, and a pre-collection window). A session toolkit is
+  in place (task `068`: read-only capture, programmatic anonymisation into
+  the corpus, promotion into the repository only after a recorded second-person
+  review).
+  Real operations start only after the owner confirms the session date.
 - **Execute the deployment package on real infrastructure (B)** after a
   separate permission, including the fail-closed configuration
   check of task `048`, which stays **not passed** until run there, and the
