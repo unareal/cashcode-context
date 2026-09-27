@@ -88,6 +88,22 @@ disconnects.
   reboot, backups, who controls what, the accepted and not-yet-accepted
   residual risks, what will be rented, and what the external validation gate
   must still check.
+- **Task `065` (owner decisions 2026-09-27) - done and verified on the
+  stand.** Final control over privileged panel accounts rests with the owner
+  alone: they are created and managed (status, deletion, and second-factor reset of a
+  top administrator) only with the command-line tool on the web host, run
+  by the owner; the panel and its API refuse all of this on the server, and
+  the web client reflects the same model. A second factor is now mandatory
+  for every privileged role, including the support administrator; an
+  administrator may reset a support administrator's second factor from the
+  panel after confirming with their own one-time code, which also ends that
+  user's sessions, and no privileged user can remove their own. The owner is notified of
+  refused privileged operations, of such resets, and of command-line account
+  changes. No separate owner role was needed. Independent specification
+  and code review (a blocking finding in the new log source was fixed and
+  re-reviewed); `v2` and `frontend` CI **success** (runs `36299374522`,
+  `36299374546` at `03474f9`). Deployed to the stand and checked live;
+  temporary accounts and settings were removed.
 - **Task `064` (owner decisions 2026-09-27) - done and verified on the
   stand.** Invitations can no longer grant a privileged panel role: such
   invitations are refused when created and, for any stored earlier, at
@@ -100,8 +116,8 @@ disconnects.
   review; `v2` and `frontend` CI **success** (runs `36293595112`,
   `36293595199` at `2d89ab2`). Deployed to the stand; a live check delivered the tested notices (automatic blocking and
   enrolment are covered by tests only); temporary test accounts and settings
-  were removed. Further access-control questions remain with the owner (see the
-  owner architecture review below).
+  were removed. The questions on who may create privileged accounts and on the
+  support administrator's second factor were then settled by task `065`.
 - **Task `063` (owner requirement 2026-09-27) - done and verified on the
   stand.** Every new successful interactive login of a privileged panel role
   (the roles that are subject to the administrative address check) now sends
@@ -1441,11 +1457,11 @@ stage. Deferring an item is not a pass, a waiver or an accepted risk.
 - **Owner architecture review (D) - the next mandatory step.** Decisions the
   owner is asked to take there: which application role the customer uses day
   to day, given how broad the top administrative role's powers in the panel
-  are; the second-factor policy for each administrative role;
+  are;
   where releases are built; the restore and failover policy that must not
   re-bind the phone fleet or re-sign an already-signed transfer; whether the
   secret store's storage is backed up or recovery relies on the owner's
-  offline copies; and who may create privileged accounts.
+  offline copies.
 - **Execute the deployment package on real infrastructure (B)** after the
   review and a separate permission, including the fail-closed configuration
   check of task `048`, which stays **not passed** until run there, and the
