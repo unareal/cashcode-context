@@ -88,6 +88,22 @@ disconnects.
   reboot, backups, who controls what, the accepted and not-yet-accepted
   residual risks, what will be rented, and what the external validation gate
   must still check.
+- **Task `063` (owner requirement 2026-09-27) - done and verified on the
+  stand.** Every new successful interactive login of a privileged panel role
+  (the roles that are subject to the administrative address check) now sends
+  the owner a notification with the login, role, time, client address, client
+  identification, whether a second factor was used, the login method, and
+  whether the address is new for that account. Refreshes, ordinary requests,
+  failed logins and non-privileged roles send nothing. The client address is
+  taken through the existing trusted-proxy model: forwarding headers are
+  honoured only from configured trusted proxies, and forged headers from any
+  other source are ignored (tested). Delivery reuses the existing log relay; a login
+  never waits for or depends on the messenger, and a failed delivery is only
+  logged. Independent specification and code review; `v2` CI **success**
+  (run `36290786951` at `a06f765`). The web side of tasks `059`-`063` was
+  deployed to the stand in the same step, and a live test login produced the
+  expected notification; the temporary test account and settings were
+  removed afterwards.
 - **Owner decisions recorded this cycle (final for this stage).** The SMS-box
   channel is not used in the first production release (kept in code, off on
   the server). The secret store is unsealed manually by a 2-of-3 threshold,
@@ -117,8 +133,7 @@ disconnects.
   `36226909151` at `04eb6e7`); the last commit `2e67164` is outside the CI
   path filter. One check was only partly possible here: building the phone
   release through the script ran out of memory on the development host and is
-  to be repeated on a larger build machine. None of this was deployed to the
-  stand in this cycle; it changes nothing there until the next web release.
+  to be repeated on a larger build machine. The web side was later deployed to the stand with task `063`.
 - **Previously completed and deployed:** `056-rub-only-bank-events`, parts A **and B**.
   By owner decision the platform serves only rouble deals and payments. After
   the owner answered the four blocking questions, the rule is now complete: the
@@ -1416,7 +1431,8 @@ stage. Deferring an item is not a pass, a waiver or an accepted risk.
   where releases are built; the restore and failover policy that must not
   re-bind the phone fleet or re-sign an already-signed transfer; whether the
   secret store's storage is backed up or recovery relies on the owner's
-  offline copies.
+  offline copies; and one further access-control policy question found by task
+  `063` (owner decision pending).
 - **Execute the deployment package on real infrastructure (B)** after the
   review and a separate permission, including the fail-closed configuration
   check of task `048`, which stays **not passed** until run there, and the
