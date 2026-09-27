@@ -1496,6 +1496,20 @@ stage. Deferring an item is not a pass, a waiver or an accepted risk.
   ceremony, the first signed release, the fail-closed configuration check on
   real infrastructure (not passed until run there), backups verified, and a
   minimal smoke test. Production still needs a separate owner permission.
+- **Order corrected (owner, 2026-09-27): the minimal external validation
+  gate is the last step, not the first.** Real bank transfers and messages
+  need the customer, so everything that does not is finished first:
+  infrastructure, the owner's secrets ceremony, the signed release, the
+  fail-closed configuration check, smoke tests without bank traffic, backups
+  with a verified restore, and monitoring. Only when the real bank flow is
+  the single remaining blocker does the gate run, on the owner's command;
+  after it passes, rollout goes straight to canary, subject to a separate
+  owner permission, with no further general
+  development cycle (only a fix for a defect the gate itself finds). Task
+  `069` added the backup, restore-check, host-monitoring and smoke templates
+  those steps need; backup and restore were exercised on a throwaway database,
+  host monitoring against stubbed commands; one consolidated owner
+  checklist lists every remaining owner action by package.
 - **Execute the deployment package on real infrastructure (B)** after a
   separate permission, including the fail-closed configuration
   check of task `048`, which stays **not passed** until run there, and the
