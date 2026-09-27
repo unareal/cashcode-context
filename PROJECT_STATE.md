@@ -88,6 +88,29 @@ disconnects.
   reboot, backups, who controls what, the accepted and not-yet-accepted
   residual risks, what will be rented, and what the external validation gate
   must still check.
+- **Owner architecture review passed (2026-09-27); decisions recorded.**
+  The customer's everyday role is the support administrator; the top
+  administrator role goes only to specific staff who need it; all privileged
+  accounts stay under the owner's sole control. Releases are built on a
+  separate owner-controlled build machine; production hosts compile nothing.
+  Web database recovery is manual only, with no automatic failover, and
+  financial correctness takes precedence over availability. The secret
+  store's own storage is not backed up; recovery relies on the owner's
+  unseal shares and independent offline copies of every irreplaceable
+  secret, now listed explicitly. Earlier decisions (SMS box off, limits
+  unchanged, one stable phone endpoint) stand. Production deployment still
+  requires a separate permission.
+- **Tasks `066` and `067` - done.** `066`: release manifests are signed
+  offline with the owner's key and verified on the host with standard tools
+  before anything from the package is used. `067`: the web service gained a
+  recovery mode that starts nothing that can move money and does not talk to
+  the custody side, plus a maintenance switch in the proxy template; the
+  manual recovery procedure is written around it, including reconciliation
+  with the custody side before money operations resume, and its reconciliation
+  checks were dry-run on copies of the stand database before the recovery
+  mode existed (a rehearsal, not production verification). Independent specification and code review for both; `v2`
+  CI **success** (run `36304947383` at `105f4c2`). Nothing was deployed to
+  the stand in this step; none was needed.
 - **Task `065` (owner decisions 2026-09-27) - done and verified on the
   stand.** Final control over privileged panel accounts rests with the owner
   alone: they are created and managed (status, deletion, and second-factor reset of a
@@ -1454,16 +1477,11 @@ repository; **B** needs production infrastructure; **C** needs real bank
 messages and phones; **D** needs an owner decision. Class A is done for this
 stage. Deferring an item is not a pass, a waiver or an accepted risk.
 
-- **Owner architecture review (D) - the next mandatory step.** Decisions the
-  owner is asked to take there: which application role the customer uses day
-  to day, given how broad the top administrative role's powers in the panel
-  are;
-  where releases are built; the restore and failover policy that must not
-  re-bind the phone fleet or re-sign an already-signed transfer; whether the
-  secret store's storage is backed up or recovery relies on the owner's
-  offline copies.
-- **Execute the deployment package on real infrastructure (B)** after the
-  review and a separate permission, including the fail-closed configuration
+- **Next stage: the external validation gate (C).** No owner decision blocks
+  it; the choices needed just before the session are listed in the prepared
+  package.
+- **Execute the deployment package on real infrastructure (B)** after a
+  separate permission, including the fail-closed configuration
   check of task `048`, which stays **not passed** until run there, and the
   unseal ceremony.
 - **External validation gate (C).** One organised session with prepared
