@@ -1,6 +1,6 @@
 # CashCode project state
 
-Last updated: 2026-09-26
+Last updated: 2026-09-28
 
 This is a compact restart checkpoint, not a diary or full specification.
 Accepted ADRs and task specifications in the private project repository remain
@@ -76,6 +76,25 @@ disconnects.
 ## Current checkpoint
 
 - **Branch:** `architecture/financial-core-redesign`
+- **Release candidate qualification passed (2026-09-28): `v2.0.0-rc4`
+  is ready for beta / test-production infrastructure.** One qualification
+  cycle on the test stand and the TRON test network (no production, mainnet,
+  real banks or customer): full automated regression, migration from scratch
+  and from earlier stand schemas, a complete end-to-end money path (deposit,
+  deal, settlement, merchant notification, withdrawal with the owner's
+  approval, on-chain confirmation, reconciliation), replay and restart
+  scenarios, a provider outage, a secret-store restart, an interrupted
+  broadcast, a 6-hour soak, the signed release bundle built and verified with
+  throwaway keys, and a browser smoke of all four panel roles. The cycle found
+  and fixed two blockers (a retried withdrawal creation could create a second
+  independently executable request; the release APK did not build) and three
+  major issues (a false critical alert on every completed withdrawal, no
+  owner alert on a TRON provider outage, rate-limit counters that never reset
+  under steady traffic) - tasks `070`-`074`. Next step: rent and prepare the
+  production infrastructure. Still required before the first canary traffic:
+  a smoke of the release APK on the existing phone and the interactive
+  administrator smoke on production. Protocol:
+  `docs/production/rc-qualification.md` in the private repository.
 - **Current stage: the production-readiness package is complete up to a
   mandatory stop - the owner's architecture review.** Production has NOT been
   deployed, no infrastructure has been rented, and nothing proceeds until the
@@ -1536,9 +1555,9 @@ stage. Deferring an item is not a pass, a waiver or an accepted risk.
 - **Recorded and left open, neither closed nor accepted:** a silent phone
   keeps receiving new deals until the offline threshold passes, and why the
   server once failed to record heartbeats is not established; accounting
-  integrity is enforced by the code rather than by the database; idempotency
-  of withdrawal creation is an open item (every withdrawal still requires the
-  owner's approval). These are listed for the owner's verdict in the review.
+  integrity is enforced by the code rather than by the database. These are
+  listed for the owner's verdict in the review. Idempotency of withdrawal
+  creation is resolved (task `070`).
 
 ## Update policy
 
